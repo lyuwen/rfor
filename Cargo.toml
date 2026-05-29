@@ -1,0 +1,21 @@
+[package]
+name = "pfor"
+version = "0.1.0"
+edition = "2021"
+description = "A parallel for-loop replacement with live output and a sticky progress bar."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "pfor"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+indicatif = "0.17"
+crossbeam-channel = "0.5"
+num_cpus = "1.16"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
