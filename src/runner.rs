@@ -27,6 +27,8 @@ pub struct RunConfig {
     pub use_bar: bool,
     /// Named variable for bash-style syntax (e.g. `i`). `None` for GNU-parallel.
     pub var_name: Option<String>,
+    /// Print commands without executing them.
+    pub dry_run: bool,
 }
 
 /// Result summary returned to main for exit-code computation.
@@ -40,6 +42,18 @@ pub struct RunSummary {
 struct Job {
     index: usize, // 1-based
     item: String,
+}
+
+/// Shared context passed to each worker thread.
+struct WorkerCtx {
+    printer: Arc<Printer>,
+    failures: Arc<AtomicUsize>,
+    halt: Arc<AtomicBool>,
+    template: String,
+    halt_on_fail: bool,
+    bar: Option<ProgressBar>,
+    var_name: Option<String>,
+    dry_run: bool,
 }
 
 /// Run all jobs according to `cfg`. Returns the summary.
@@ -97,24 +111,18 @@ pub fn run(cfg: RunConfig) -> RunSummary {
     let mut workers = Vec::with_capacity(cfg.jobs);
     for _ in 0..cfg.jobs {
         let rx = rx.clone();
-        let printer = Arc::clone(&printer);
-        let failures = Arc::clone(&failures);
-        let halt = Arc::clone(&halt);
-        let template = cfg.template.clone();
-        let halt_on_fail = cfg.halt_on_fail;
-        let bar = bar_opt.clone();
-        let var_name = cfg.var_name.clone();
+        let ctx = WorkerCtx {
+            printer: Arc::clone(&printer),
+            failures: Arc::clone(&failures),
+            halt: Arc::clone(&halt),
+            template: cfg.template.clone(),
+            halt_on_fail: cfg.halt_on_fail,
+            bar: bar_opt.clone(),
+            var_name: cfg.var_name.clone(),
+            dry_run: cfg.dry_run,
+        };
         workers.push(thread::spawn(move || {
-            worker_loop(
-                rx,
-                &printer,
-                &failures,
-                &halt,
-                &template,
-                halt_on_fail,
-                bar.as_ref(),
-                var_name.as_deref(),
-            );
+            worker_loop(rx, &ctx);
         }));
     }
     drop(rx);
@@ -134,31 +142,24 @@ pub fn run(cfg: RunConfig) -> RunSummary {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn worker_loop(
-    rx: Receiver<Job>,
-    printer: &Arc<Printer>,
-    failures: &Arc<AtomicUsize>,
-    halt: &Arc<AtomicBool>,
-    template: &str,
-    halt_on_fail: bool,
-    bar: Option<&ProgressBar>,
-    var_name: Option<&str>,
-) {
+fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
     while let Ok(job) = rx.recv() {
-        if halt.load(Ordering::Acquire) {
-            // Halt was signaled — stop processing, let the channel drain.
+        if ctx.halt.load(Ordering::Acquire) {
             break;
         }
-        let rendered = template::render(template, &job.item, job.index, var_name);
-        let ok = spawn_and_stream(&rendered, printer);
-        if !ok {
-            failures.fetch_add(1, Ordering::AcqRel);
-            if halt_on_fail {
-                halt.store(true, Ordering::Release);
+        let rendered = template::render(&ctx.template, &job.item, job.index, ctx.var_name.as_deref());
+        if ctx.dry_run {
+            ctx.printer.println(Stream::Stdout, &rendered);
+        } else {
+            let ok = spawn_and_stream(&rendered, &ctx.printer);
+            if !ok {
+                ctx.failures.fetch_add(1, Ordering::AcqRel);
+                if ctx.halt_on_fail {
+                    ctx.halt.store(true, Ordering::Release);
+                }
             }
         }
-        if let Some(b) = bar {
+        if let Some(b) = &ctx.bar {
             b.inc(1);
         }
     }

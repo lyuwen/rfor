@@ -3,9 +3,15 @@
 //! Recognized tokens:
 //! - `{}`       -> current item (shell-quoted)
 //! - `{#}`      -> 1-based job index
+//! - `{.}`      -> item without last extension (shell-quoted)
+//! - `{/}`      -> basename of item (shell-quoted)
+//! - `{//}`     -> dirname of item (shell-quoted)
+//! - `{/.}`     -> basename without extension (shell-quoted)
 //! - `{name}`   -> current item if `name` matches the declared variable (bash-style)
 //! - `{{`       -> literal `{`
 //! - `}}`       -> literal `}`
+
+use std::path::Path;
 
 /// POSIX shell-quote a string by wrapping in single quotes and escaping
 /// embedded single quotes via `'\''`.
@@ -23,11 +29,59 @@ pub fn shell_quote(s: &str) -> String {
     out
 }
 
-/// Render a template by substituting `{}`, `{#}`, and `{varname}` tokens.
+/// Remove the last extension from `item`: `photo.tar.gz` → `photo.tar`.
+fn strip_extension(item: &str) -> String {
+    let p = Path::new(item);
+    match (p.parent(), p.file_stem()) {
+        (Some(parent), Some(stem)) => {
+            let parent_str = parent.to_string_lossy();
+            let stem_str = stem.to_string_lossy();
+            if parent_str.is_empty() {
+                stem_str.into_owned()
+            } else {
+                format!("{}/{}", parent_str, stem_str)
+            }
+        }
+        _ => item.to_string(),
+    }
+}
+
+/// Basename of `item`: `/path/to/file.txt` → `file.txt`.
+fn basename(item: &str) -> String {
+    Path::new(item)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| item.to_string())
+}
+
+/// Directory of `item`: `/path/to/file.txt` → `/path/to`.
+fn dirname(item: &str) -> String {
+    Path::new(item)
+        .parent()
+        .map(|p| {
+            let s = p.to_string_lossy().into_owned();
+            if s.is_empty() { ".".to_string() } else { s }
+        })
+        .unwrap_or_else(|| item.to_string())
+}
+
+/// Basename without extension: `/path/to/file.txt` → `file`.
+fn basename_no_ext(item: &str) -> String {
+    Path::new(item)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| item.to_string())
+}
+
+/// Render a template by substituting `{}`, `{#}`, filename tokens, and
+/// `{varname}` tokens.
 ///
 /// When `var_name` is `Some("i")`, `{i}` is replaced with the shell-quoted
 /// item. `{other}` passes through literally if `other` does not match.
 /// `{}` and `{#}` always work regardless of `var_name`.
+///
+/// Filename tokens (`{.}`, `{/}`, `{//}`, `{/.}`) always operate on the raw
+/// item and do NOT interact with named variables.
 ///
 /// Iterates over `char` boundaries so multi-byte UTF-8 in the template
 /// (e.g. `echo café {}`) passes through without corruption.
@@ -55,6 +109,54 @@ pub fn render(template: &str, item: &str, index: usize, var_name: Option<&str>) 
                         // Not `{#}`, emit literally.
                         out.push('{');
                         out.push('#');
+                    }
+                }
+                Some('/') => {
+                    // Could be {/}, {//}, or {/.}
+                    chars.next(); // consume first '/'
+                    match chars.peek() {
+                        Some('}') => {
+                            // {/} — basename
+                            chars.next();
+                            out.push_str(&shell_quote(&basename(item)));
+                        }
+                        Some('/') => {
+                            // {//} — dirname
+                            chars.next(); // consume second '/'
+                            if chars.peek() == Some(&'}') {
+                                chars.next();
+                                out.push_str(&shell_quote(&dirname(item)));
+                            } else {
+                                // Not {//}, emit literally
+                                out.push_str("{//");
+                            }
+                        }
+                        Some('.') => {
+                            // {/.} — basename without extension
+                            chars.next(); // consume '.'
+                            if chars.peek() == Some(&'}') {
+                                chars.next();
+                                out.push_str(&shell_quote(&basename_no_ext(item)));
+                            } else {
+                                // Not {/.}, emit literally
+                                out.push_str("{/.");
+                            }
+                        }
+                        _ => {
+                            // Just `{/` followed by something else — emit literally
+                            out.push_str("{/");
+                        }
+                    }
+                }
+                Some('.') => {
+                    // {.} — item without extension
+                    chars.next(); // consume '.'
+                    if chars.peek() == Some(&'}') {
+                        chars.next();
+                        out.push_str(&shell_quote(&strip_extension(item)));
+                    } else {
+                        // Not {.}, emit literally
+                        out.push_str("{.");
                     }
                 }
                 Some(&c) if c.is_alphanumeric() || c == '_' => {
@@ -100,13 +202,9 @@ pub fn render(template: &str, item: &str, index: usize, var_name: Option<&str>) 
     out
 }
 
-/// GNU parallel tokens that pfor does not support in v1.
+/// GNU parallel tokens that pfor does not yet support.
 /// Each entry is (token, description).
 const UNSUPPORTED_TOKENS: &[(&str, &str)] = &[
-    ("{.}", "item without extension"),
-    ("{/}", "basename of item"),
-    ("{//}", "dirname of item"),
-    ("{/.}", "basename without extension"),
     ("{%}", "job slot number"),
 ];
 
@@ -213,5 +311,59 @@ mod tests {
     #[test]
     fn named_var_no_closing_brace_literal() {
         assert_eq!(render("echo {i", "x", 1, Some("i")), "echo {i");
+    }
+
+    // --- Filename tokens ---
+
+    #[test]
+    fn strip_ext_token() {
+        assert_eq!(
+            render("echo {.}", "photo.tar.gz", 1, None),
+            "echo 'photo.tar'"
+        );
+    }
+
+    #[test]
+    fn strip_ext_no_extension() {
+        assert_eq!(render("echo {.}", "README", 1, None), "echo 'README'");
+    }
+
+    #[test]
+    fn basename_token() {
+        assert_eq!(
+            render("echo {/}", "/path/to/file.txt", 1, None),
+            "echo 'file.txt'"
+        );
+    }
+
+    #[test]
+    fn dirname_token() {
+        assert_eq!(
+            render("echo {//}", "/path/to/file.txt", 1, None),
+            "echo '/path/to'"
+        );
+    }
+
+    #[test]
+    fn dirname_token_no_dir() {
+        assert_eq!(render("echo {//}", "file.txt", 1, None), "echo '.'");
+    }
+
+    #[test]
+    fn basename_no_ext_token() {
+        assert_eq!(
+            render("echo {/.}", "/path/to/file.txt", 1, None),
+            "echo 'file'"
+        );
+    }
+
+    #[test]
+    fn all_filename_tokens_together() {
+        let t = "echo {} {.} {/} {//} {/.}";
+        let result = render(t, "/a/b/c.tar.gz", 1, None);
+        assert_eq!(
+            result,
+            "echo '/a/b/c.tar.gz' '/a/b/c.tar' 'c.tar.gz' '/a/b' 'c.tar'"
+        );
     }
 }
