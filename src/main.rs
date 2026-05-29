@@ -71,6 +71,7 @@ fn main() -> ExitCode {
         group: parsed.group,
         retries: parsed.retries,
         results_dir: parsed.results,
+        multi_bar: parsed.multi_bar,
     });
 
     if summary.failures == 0 {
