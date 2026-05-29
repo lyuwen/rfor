@@ -176,12 +176,14 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
                     ok = result.success;
                     // If grouped + retries, only emit the final attempt's output.
                     if ok || attempt == max_attempts {
+                        let mut block: Vec<(Stream, &str)> = Vec::new();
                         for line in &result.stdout_lines {
-                            ctx.printer.println(Stream::Stdout, line);
+                            block.push((Stream::Stdout, line));
                         }
                         for line in &result.stderr_lines {
-                            ctx.printer.println(Stream::Stderr, line);
+                            block.push((Stream::Stderr, line));
                         }
+                        ctx.printer.println_block(&block);
                     }
                 } else {
                     ok = spawn_and_stream(&rendered, &ctx.printer);

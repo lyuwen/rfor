@@ -33,29 +33,48 @@ impl Printer {
     pub fn println(&self, stream: Stream, line: &str) {
         match self {
             Printer::Bar(mp) => {
-                // indicatif renders the bar on stderr; printing through
-                // MultiProgress::println suspends the bar, writes the line
-                // to stderr, and redraws. We intentionally collapse stdout
-                // and stderr to the same channel here so both stream above
-                // the bar; if a user wants strict stdout/stderr separation
-                // they should redirect off-TTY (then we fall to Plain).
                 let _ = mp.println(line);
-                let _ = stream; // both routed via mp.println for ordering
+                let _ = stream;
             }
             Printer::Plain(lock) => {
                 let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-                match stream {
-                    Stream::Stdout => {
-                        let mut out = io::stdout().lock();
-                        let _ = writeln!(out, "{}", line);
-                        let _ = out.flush();
-                    }
-                    Stream::Stderr => {
-                        let mut err = io::stderr().lock();
-                        let _ = writeln!(err, "{}", line);
-                        let _ = err.flush();
-                    }
+                Self::write_line(&stream, line);
+            }
+        }
+    }
+
+    /// Print multiple lines atomically — holds the lock for the entire block
+    /// so no other worker can interleave. Used by `--group` mode.
+    pub fn println_block(&self, lines: &[(Stream, &str)]) {
+        match self {
+            Printer::Bar(mp) => {
+                // indicatif's MultiProgress::println is internally locked,
+                // but we need atomicity across multiple calls. Suspend the
+                // bar once and write all lines.
+                for (_, line) in lines {
+                    let _ = mp.println(*line);
                 }
+            }
+            Printer::Plain(lock) => {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+                for (stream, line) in lines {
+                    Self::write_line(stream, line);
+                }
+            }
+        }
+    }
+
+    fn write_line(stream: &Stream, line: &str) {
+        match stream {
+            Stream::Stdout => {
+                let mut out = io::stdout().lock();
+                let _ = writeln!(out, "{}", line);
+                let _ = out.flush();
+            }
+            Stream::Stderr => {
+                let mut err = io::stderr().lock();
+                let _ = writeln!(err, "{}", line);
+                let _ = err.flush();
             }
         }
     }
