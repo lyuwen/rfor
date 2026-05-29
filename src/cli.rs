@@ -35,6 +35,11 @@ pub struct Cli {
     #[arg(long = "retries", default_value_t = 0, value_name = "N")]
     pub retries: usize,
 
+    /// Save each job's stdout/stderr to files in DIR.
+    /// Files are named `{index}-{item}.out` and `{index}-{item}.err`.
+    #[arg(long = "results", value_name = "DIR")]
+    pub results: Option<String>,
+
     /// Command template plus optional `:::` items or `::::` argfile.
     ///
     /// The first positional is the template (e.g. `'echo {}'`).
@@ -91,6 +96,18 @@ Examples:
 
   # Retry failed jobs up to 3 times
   pfor --retries 3 'curl -sfO {}' ::: url1 url2 url3
+
+  # Save job output to files
+  pfor --results ./out 'echo {}' ::: a b c
+
+  # Brace expansion — numeric range
+  pfor 'echo {}' ::: {1..10}
+
+  # Brace expansion — zero-padded
+  pfor 'process file{}.dat' ::: {01..20}
+
+  # Brace expansion — alphabetic
+  pfor 'echo {}' ::: {a..f}
 
   # Stop on first failure
   pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
