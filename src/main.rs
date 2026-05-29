@@ -50,6 +50,8 @@ fn main() -> ExitCode {
         use_bar,
         var_name: args.var_name,
         dry_run: parsed.dry_run,
+        group: parsed.group,
+        retries: parsed.retries,
     });
 
     if summary.failures == 0 {
