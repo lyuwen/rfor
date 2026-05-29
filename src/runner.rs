@@ -37,6 +37,8 @@ pub struct RunConfig {
     pub retries: usize,
     /// Directory to save each job's stdout/stderr output files.
     pub results_dir: Option<String>,
+    /// Show per-worker slot bars alongside the main progress bar.
+    pub multi_bar: bool,
 }
 
 /// Result summary returned to main for exit-code computation.
@@ -65,6 +67,8 @@ struct WorkerCtx {
     group: bool,
     retries: usize,
     results_dir: Option<String>,
+    /// Per-worker slot bar for multi-bar mode. `None` when not enabled.
+    slot_bar: Option<ProgressBar>,
 }
 
 /// Run all jobs according to `cfg`. Returns the summary.
@@ -76,8 +80,28 @@ pub fn run(cfg: RunConfig) -> RunSummary {
     }
 
     // Choose mode + build printer/bar.
-    let (printer, bar_opt): (Arc<Printer>, Option<ProgressBar>) = if cfg.use_bar {
+    let use_multi_bar = cfg.multi_bar && cfg.use_bar && cfg.jobs > 1;
+    let (printer, bar_opt, slot_bars): (Arc<Printer>, Option<ProgressBar>, Vec<Option<ProgressBar>>) = if cfg.use_bar {
         let mp = MultiProgress::new();
+
+        // Create per-slot bars ABOVE the main bar when multi-bar is enabled.
+        let slots: Vec<Option<ProgressBar>> = if use_multi_bar {
+            let slot_style = ProgressStyle::with_template("  {prefix:.dim} {msg}")
+                .expect("valid slot template");
+            (0..cfg.jobs)
+                .map(|i| {
+                    let sb = mp.add(ProgressBar::new_spinner());
+                    sb.set_style(slot_style.clone());
+                    sb.set_prefix(format!("[slot {}]", i + 1));
+                    sb.set_message("idle");
+                    sb.enable_steady_tick(Duration::from_millis(200));
+                    Some(sb)
+                })
+                .collect()
+        } else {
+            (0..cfg.jobs).map(|_| None).collect()
+        };
+
         let bar = mp.add(ProgressBar::new(total as u64));
         bar.set_style(
             ProgressStyle::with_template(
@@ -87,9 +111,10 @@ pub fn run(cfg: RunConfig) -> RunSummary {
             .progress_chars("=>-"),
         );
         bar.enable_steady_tick(Duration::from_millis(100));
-        (Arc::new(Printer::bar(mp)), Some(bar))
+        (Arc::new(Printer::bar(mp)), Some(bar), slots)
     } else {
-        (Arc::new(Printer::plain()), None)
+        let slots: Vec<Option<ProgressBar>> = (0..cfg.jobs).map(|_| None).collect();
+        (Arc::new(Printer::plain()), None, slots)
     };
 
     let failures = Arc::new(AtomicUsize::new(0));
@@ -120,7 +145,8 @@ pub fn run(cfg: RunConfig) -> RunSummary {
 
     // Worker threads.
     let mut workers = Vec::with_capacity(cfg.jobs);
-    for _ in 0..cfg.jobs {
+    for (worker_idx, slot_bar) in slot_bars.into_iter().enumerate() {
+        let _ = worker_idx;
         let rx = rx.clone();
         let ctx = WorkerCtx {
             printer: Arc::clone(&printer),
@@ -134,6 +160,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
             group: cfg.group,
             retries: cfg.retries,
             results_dir: cfg.results_dir.clone(),
+            slot_bar,
         };
         workers.push(thread::spawn(move || {
             worker_loop(rx, &ctx);
@@ -150,6 +177,8 @@ pub fn run(cfg: RunConfig) -> RunSummary {
         b.finish_and_clear();
     }
 
+    // Note: slot bars are owned by workers and cleared when worker_loop exits.
+
     RunSummary {
         total,
         failures: failures.load(Ordering::Acquire),
@@ -160,6 +189,10 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
     while let Ok(job) = rx.recv() {
         if ctx.halt.load(Ordering::Acquire) {
             break;
+        }
+        // Update slot bar with current item.
+        if let Some(ref sb) = ctx.slot_bar {
+            sb.set_message(format!("running: {}", job.item));
         }
         let rendered = template::render(&ctx.template, &job.item, job.index, ctx.var_name.as_deref());
         if ctx.dry_run {
@@ -229,6 +262,14 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
         if let Some(b) = &ctx.bar {
             b.inc(1);
         }
+        // Clear slot bar after job completes.
+        if let Some(ref sb) = ctx.slot_bar {
+            sb.set_message("idle");
+        }
+    }
+    // Worker exiting — clear the slot bar.
+    if let Some(ref sb) = ctx.slot_bar {
+        sb.finish_and_clear();
     }
 }
 

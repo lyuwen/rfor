@@ -40,6 +40,11 @@ pub struct Cli {
     #[arg(long = "results", value_name = "DIR")]
     pub results: Option<String>,
 
+    /// Show per-worker slot bars alongside the main progress bar (experimental).
+    /// Each worker displays its currently running item. Requires TTY and -j > 1.
+    #[arg(long = "multi-bar", action = ArgAction::SetTrue)]
+    pub multi_bar: bool,
+
     /// Command template plus optional `:::` items or `::::` argfile.
     ///
     /// The first positional is the template (e.g. `'echo {}'`).
@@ -79,6 +84,12 @@ Examples:
   # Bash for-loop style — inline items
   pfor i in a b c -- echo {i}
 
+  # Bash for-loop style — do/done keywords
+  pfor i in a b c do echo {i} done
+
+  # Bash for-loop style — stdin with do/done
+  cat items.txt | pfor i do echo {i} done
+
   # Bash for-loop style — with file
   pfor i in :::: urls.txt -- curl -sO {i}
 
@@ -108,6 +119,9 @@ Examples:
 
   # Brace expansion — alphabetic
   pfor 'echo {}' ::: {a..f}
+
+  # Multi-bar — per-worker progress (experimental)
+  pfor -j 4 --multi-bar 'sleep 1 && echo {}' ::: {1..20}
 
   # Stop on first failure
   pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
@@ -150,7 +164,7 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
         if rest[1] == "in" {
             return parse_bash_with_items(&rest);
         }
-        if rest[1] == "--" {
+        if rest[1] == "--" || rest[1] == "do" {
             return parse_bash_stdin(&rest);
         }
     }
@@ -181,38 +195,49 @@ fn validate_var_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Parse bash-style with items: `VAR in ITEM... -- COMMAND...`
+/// Parse bash-style with items: `VAR in ITEM... (--|do) COMMAND... [done]`
 ///
-/// Items between `in` and `--` become inline_items, unless they are
+/// Items between `in` and `--`/`do` become inline_items, unless they are
 /// `:::: FILE`, in which case they become an argfile reference.
+/// An optional trailing `done` after the command is stripped.
+///
+/// Note: if an item is literally `"do"`, use `--` as the separator instead.
 fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
     let var_name = rest[0].clone();
     validate_var_name(&var_name)?;
 
-    // Find the `--` separator.
-    let sep_pos = rest.iter().position(|a| a == "--");
+    // Find separator: prefer `--` over `do` so that literal "do" items work
+    // when the user uses `--` as the separator.
+    let sep_pos = rest.iter().position(|a| a == "--").filter(|&p| p > 1)
+        .or_else(|| rest.iter().enumerate().skip(2).find_map(|(i, a)| {
+            if a == "do" { Some(i) } else { None }
+        }));
     let sep_pos = match sep_pos {
-        Some(p) if p > 2 => p, // must be after "VAR in ..."
+        Some(p) if p > 2 => p,
         Some(2) => {
             return Err(format!(
-                "no items between `in` and `--`. \
+                "no items between `in` and separator. \
                  Did you mean `pfor {} -- COMMAND` to read from stdin?",
                 var_name
             ));
         }
         _ => {
             return Err(format!(
-                "missing `--` separator. Bash-style syntax: \
-                 pfor {} in ITEMS -- COMMAND",
-                var_name
+                "missing `--` or `do` separator. Bash-style syntax: \
+                 pfor {} in ITEMS -- COMMAND  (or: pfor {} in ITEMS do COMMAND done)",
+                var_name, var_name
             ));
         }
     };
 
     let items_slice = &rest[2..sep_pos];
-    let cmd_words = &rest[sep_pos + 1..];
+    let mut cmd_words: Vec<&str> = rest[sep_pos + 1..].iter().map(|s| s.as_str()).collect();
+    // Strip optional trailing `done`.
+    if cmd_words.last() == Some(&"done") {
+        cmd_words.pop();
+    }
     if cmd_words.is_empty() {
-        return Err("missing command after `--`".into());
+        return Err("missing command after separator".into());
     }
     let template = cmd_words.join(" ");
 
@@ -246,13 +271,17 @@ fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
     })
 }
 
-/// Parse bash-style with stdin: `VAR -- COMMAND...`
+/// Parse bash-style with stdin: `VAR (--|do) COMMAND... [done]`
 fn parse_bash_stdin(rest: &[String]) -> Result<SplitArgs, String> {
     let var_name = rest[0].clone();
     validate_var_name(&var_name)?;
-    let cmd_words = &rest[2..];
+    let mut cmd_words: Vec<&str> = rest[2..].iter().map(|s| s.as_str()).collect();
+    // Strip optional trailing `done`.
+    if cmd_words.last() == Some(&"done") {
+        cmd_words.pop();
+    }
     if cmd_words.is_empty() {
-        return Err("missing command after `--`".into());
+        return Err("missing command after separator".into());
     }
     let template = cmd_words.join(" ");
 
@@ -484,5 +513,57 @@ mod tests {
             "echo {#}".into(), ":::".into(), "a".into(),
         ]).unwrap();
         assert!(s.var_name.is_none());
+    }
+
+    // --- do/done keywords ---
+
+    #[test]
+    fn bash_do_done_inline() {
+        let s = split_rest(vec![
+            "i".into(), "in".into(), "a".into(), "b".into(),
+            "do".into(), "echo".into(), "{i}".into(), "done".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "echo {i}");
+        assert_eq!(s.inline_items.unwrap(), vec!["a", "b"]);
+        assert_eq!(s.var_name.unwrap(), "i");
+    }
+
+    #[test]
+    fn bash_do_without_done() {
+        let s = split_rest(vec![
+            "i".into(), "in".into(), "x".into(),
+            "do".into(), "echo".into(), "{i}".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "echo {i}");
+        assert_eq!(s.inline_items.unwrap(), vec!["x"]);
+    }
+
+    #[test]
+    fn bash_do_stdin() {
+        let s = split_rest(vec![
+            "i".into(), "do".into(), "echo".into(), "{i}".into(), "done".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "echo {i}");
+        assert!(s.inline_items.is_none());
+        assert_eq!(s.var_name.unwrap(), "i");
+    }
+
+    #[test]
+    fn bash_do_stdin_no_done() {
+        let s = split_rest(vec![
+            "i".into(), "do".into(), "echo".into(), "{i}".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "echo {i}");
+    }
+
+    #[test]
+    fn bash_dash_dash_still_works() {
+        // Existing -- separator still works exactly as before
+        let s = split_rest(vec![
+            "i".into(), "in".into(), "a".into(),
+            "--".into(), "echo".into(), "{i}".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "echo {i}");
+        assert_eq!(s.inline_items.unwrap(), vec!["a"]);
     }
 }
