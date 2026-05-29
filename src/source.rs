@@ -32,12 +32,12 @@ pub fn resolve(
         (Some(items), None) => Ok(items),
         (None, Some(path)) => read_lines(File::open(path)?),
         (None, None) => {
-            // stdin
+            // stdin — if it's a terminal the user probably forgot ::: or ::::
             if io::stdin().is_terminal() {
-                // User invoked pfor without items and without piping anything.
-                // Read stdin anyway (will block) — but emit a hint via error.
-                // Actually fall through to read: if user truly wants stdin,
-                // they'll Ctrl-D. If they made a mistake, --help is documented.
+                eprintln!(
+                    "pfor: reading items from stdin (one per line). \
+                     Press Ctrl-D when done, or use ::: / :::: to pass items."
+                );
             }
             read_lines(io::stdin().lock())
         }
