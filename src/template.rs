@@ -68,6 +68,30 @@ pub fn render(template: &str, item: &str, index: usize) -> String {
     out
 }
 
+/// GNU parallel tokens that pfor does not support in v1.
+/// Each entry is (token, description).
+const UNSUPPORTED_TOKENS: &[(&str, &str)] = &[
+    ("{.}", "item without extension"),
+    ("{/}", "basename of item"),
+    ("{//}", "dirname of item"),
+    ("{/.}", "basename without extension"),
+    ("{%}", "job slot number"),
+];
+
+/// Check a template for GNU parallel tokens that pfor doesn't support.
+/// Emits one warning per unsupported token found (to stderr, once per run).
+pub fn warn_unsupported_tokens(template: &str) {
+    for &(token, desc) in UNSUPPORTED_TOKENS {
+        if template.contains(token) {
+            eprintln!(
+                "pfor: warning: `{}` ({}) is not supported in pfor v1 \
+                 and will be passed through literally",
+                token, desc
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -54,6 +54,7 @@ Examples:
 ";
 
 /// Parsed result of splitting positional arguments into their components.
+#[derive(Debug)]
 pub struct SplitArgs {
     /// The command template string (e.g. `"echo {}"`).
     pub template: String,
@@ -106,6 +107,14 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
             let items: Vec<String> = rest[i + 1..].to_vec();
             if items.is_empty() {
                 return Err("`:::` provided but no items followed it".into());
+            }
+            // Reject if a second separator sneaked into the items.
+            if let Some(pos) = items.iter().position(|a| a == "::::" || a == ":::") {
+                return Err(format!(
+                    "mixed separators: found `{}` after `:::`. \
+                     Use either `:::` or `::::`, not both.",
+                    items[pos]
+                ));
             }
             Ok(SplitArgs { template, inline_items: Some(items), argfile: None })
         }
@@ -161,5 +170,18 @@ mod tests {
     #[test]
     fn double_colons_empty_err() {
         assert!(split_rest(vec!["echo {}".into(), ":::".into()]).is_err());
+    }
+
+    #[test]
+    fn mixed_separators_rejected() {
+        let result = split_rest(vec![
+            "echo {}".into(),
+            ":::".into(),
+            "a".into(),
+            "::::".into(),
+            "file.txt".into(),
+        ]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("mixed separators"));
     }
 }

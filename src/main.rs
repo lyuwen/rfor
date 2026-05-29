@@ -39,6 +39,9 @@ fn main() -> ExitCode {
 
     let use_bar = tty::stderr_is_tty();
 
+    // Warn once if the template uses GNU parallel tokens pfor doesn't support.
+    template::warn_unsupported_tokens(&args.template);
+
     let summary = runner::run(runner::RunConfig {
         template: args.template,
         items,
