@@ -62,7 +62,7 @@ fn dirname(item: &str) -> String {
             let s = p.to_string_lossy().into_owned();
             if s.is_empty() { ".".to_string() } else { s }
         })
-        .unwrap_or_else(|| ".".to_string())
+        .unwrap_or_else(|| item.to_string())
 }
 
 /// Basename without extension: `/path/to/file.txt` → `file`.
