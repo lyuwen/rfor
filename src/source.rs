@@ -30,7 +30,9 @@ pub fn resolve(
 ) -> io::Result<Vec<String>> {
     match (inline, file) {
         (Some(items), None) => Ok(items),
-        (None, Some(path)) => read_lines(File::open(path)?),
+        (None, Some(ref path)) => read_lines(File::open(path).map_err(|e| {
+            io::Error::new(e.kind(), format!("{}: {}", path, e))
+        })?),
         (None, None) => {
             // stdin — if it's a terminal the user probably forgot ::: or ::::
             if io::stdin().is_terminal() {
