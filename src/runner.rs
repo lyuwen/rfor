@@ -25,6 +25,8 @@ pub struct RunConfig {
     pub jobs: usize,
     pub halt_on_fail: bool,
     pub use_bar: bool,
+    /// Named variable for bash-style syntax (e.g. `i`). `None` for GNU-parallel.
+    pub var_name: Option<String>,
 }
 
 /// Result summary returned to main for exit-code computation.
@@ -101,6 +103,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
         let template = cfg.template.clone();
         let halt_on_fail = cfg.halt_on_fail;
         let bar = bar_opt.clone();
+        let var_name = cfg.var_name.clone();
         workers.push(thread::spawn(move || {
             worker_loop(
                 rx,
@@ -110,6 +113,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
                 &template,
                 halt_on_fail,
                 bar.as_ref(),
+                var_name.as_deref(),
             );
         }));
     }
@@ -130,6 +134,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn worker_loop(
     rx: Receiver<Job>,
     printer: &Arc<Printer>,
@@ -138,13 +143,14 @@ fn worker_loop(
     template: &str,
     halt_on_fail: bool,
     bar: Option<&ProgressBar>,
+    var_name: Option<&str>,
 ) {
     while let Ok(job) = rx.recv() {
         if halt.load(Ordering::Acquire) {
             // Halt was signaled — stop processing, let the channel drain.
             break;
         }
-        let rendered = template::render(template, &job.item, job.index);
+        let rendered = template::render(template, &job.item, job.index, var_name);
         let ok = spawn_and_stream(&rendered, printer);
         if !ok {
             failures.fetch_add(1, Ordering::AcqRel);

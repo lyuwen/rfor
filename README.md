@@ -16,8 +16,11 @@ day-to-day loops that benefit from visual feedback.
   redirected.
 - **Parallel or sequential** — sequential by default (`-j 1`); scale to any
   concurrency with `-j N` or let the system choose with `-j 0`.
-- **Familiar syntax** — GNU-parallel-style `:::` / `::::` separators and
-  `{}` / `{#}` substitution tokens.
+- **Two syntax styles** — GNU-parallel-style (`:::` / `::::`) *and*
+  bash-for-loop-style (`pfor i in ... -- command {i}`).  Pick whichever
+  reads more naturally.
+- **Named variables** — bash-style syntax lets you name the loop variable
+  (`{url}`, `{file}`, `{host}`) so commands read like documentation.
 
 ## Installation
 
@@ -42,8 +45,11 @@ cargo build --release
 ## Quick start
 
 ```sh
-# Greet three items inline
+# Greet three items inline (GNU parallel style)
 pfor 'echo hello {}' ::: world rust pfor
+
+# Same thing, bash for-loop style
+pfor name in world rust pfor -- echo hello {name}
 
 # Download URLs listed in a file, 4 at a time
 pfor -j 4 'curl -sO {}' :::: urls.txt
@@ -54,21 +60,49 @@ find . -name '*.log' | pfor 'gzip {}'
 
 ## Usage
 
+`pfor` supports two syntax styles.  They are fully interchangeable — pick
+whichever is clearer for your use case.
+
+### GNU parallel style
+
 ```
 pfor [OPTIONS] '<command template>' ::: item1 item2 ...
 pfor [OPTIONS] '<command template>' :::: argfile
 <stdin> | pfor [OPTIONS] '<command template>'
 ```
 
-The first positional argument is always the **command template** — a shell
-string executed via `sh -c` for each item.  Items come from one of three
-sources (exactly one per invocation):
+The first positional argument is the **command template** — a shell string
+executed via `sh -c` for each item.
 
-| Source | Syntax | Example |
-|--------|--------|---------|
-| Inline | `:::` followed by arguments | `pfor 'echo {}' ::: a b c` |
-| File | `::::` followed by a file path | `pfor 'echo {}' :::: items.txt` |
-| Stdin | pipe or redirect into `pfor` | `cat list \| pfor 'echo {}'` |
+### Bash for-loop style
+
+```
+pfor [OPTIONS] VAR in item1 item2 ... -- command {VAR}
+pfor [OPTIONS] VAR in :::: argfile   -- command {VAR}
+<stdin> | pfor [OPTIONS] VAR         -- command {VAR}
+```
+
+`VAR` is a variable name you choose (e.g. `i`, `url`, `host`).  Everything
+between `in` and `--` becomes the item list.  Everything after `--` is the
+command, with `{VAR}` expanded to the current item.
+
+The `--` separator is required — it tells `pfor` where items end and the
+command begins.
+
+> **How pfor picks the style:** if the first positional contains `{}` or
+> `{#}`, it's treated as a GNU-parallel template.  Otherwise, if the second
+> word is `in` or `--`, it's bash-style.  Everything else falls back to
+> GNU-parallel.
+
+### Item sources
+
+Items come from one of three sources (exactly one per invocation):
+
+| Source | GNU parallel style | Bash for-loop style |
+|--------|-------------------|---------------------|
+| Inline | `pfor 'echo {}' ::: a b c` | `pfor i in a b c -- echo {i}` |
+| File | `pfor 'echo {}' :::: items.txt` | `pfor i in :::: items.txt -- echo {i}` |
+| Stdin | `cat list \| pfor 'echo {}'` | `cat list \| pfor i -- echo {i}` |
 
 Blank lines in files and stdin are silently skipped.
 
@@ -80,16 +114,47 @@ Blank lines in files and stdin are silently skipped.
 
 Tokens inside the command template are expanded before each invocation:
 
-| Token | Expands to | Example |
-|-------|------------|---------|
-| `{}`  | Current item (automatically shell-quoted) | `pfor 'echo {}'  ::: hello` → `echo 'hello'` |
-| `{#}` | 1-based job index | `pfor 'echo {#}' ::: a b c` → `1`, `2`, `3` |
-| `{{`  | Literal `{` | `pfor 'echo {{}}'` → `echo {}`  |
-| `}}`  | Literal `}` | |
+| Token | Expands to | Works in |
+|-------|------------|----------|
+| `{}`  | Current item (automatically shell-quoted) | Both styles |
+| `{#}` | 1-based job index | Both styles |
+| `{VAR}` | Current item, if `VAR` matches the declared variable name | Bash-style only |
+| `{{`  | Literal `{` | Both styles |
+| `}}`  | Literal `}` | Both styles |
 
-Items substituted via `{}` are POSIX-shell-quoted (single-quoted with
-embedded `'` escaped), so filenames with spaces, quotes, or glob characters
-are handled safely.
+Items substituted via `{}` or `{VAR}` are POSIX-shell-quoted (single-quoted
+with embedded `'` escaped), so filenames with spaces, quotes, or glob
+characters are handled safely.
+
+### Named variables (bash-style)
+
+In bash-style syntax, `{VAR}` is only substituted when `VAR` matches the
+declared variable name.  Other names pass through literally:
+
+```sh
+pfor i in a b c -- echo {i} and {other}
+# Output:
+#   a and {other}
+#   b and {other}
+#   c and {other}
+```
+
+This is intentional — it means commands containing literal braces (like
+`jq '{.name}'`) work without escaping, as long as the content inside the
+braces doesn't match your variable name.
+
+You can use `{}`, `{#}`, and `{VAR}` together in the same command:
+
+```sh
+pfor i in a b c -- echo job {#}: {} is {i}
+# Output:
+#   job 1: a is a
+#   job 2: b is b
+#   job 3: c is c
+```
+
+Variable names must be valid identifiers: start with a letter or underscore,
+contain only letters, digits, and underscores.
 
 ## Options
 
@@ -187,32 +252,37 @@ find /var/log -name '*.log' -mtime +7 | pfor -j 4 'gzip -9 {}'
 ### Run tests across multiple packages
 
 ```sh
-pfor -j 0 'cargo test -p {}' ::: core api web
+pfor -j 0 pkg in core api web -- cargo test -p {pkg}
 ```
 
 ### Batch image conversion
 
 ```sh
-ls *.png | pfor -j 8 'convert {} -resize 800x600 resized/{}'
+ls *.png | pfor -j 8 img -- convert {img} -resize 800x600 resized/{img}
 ```
 
 ### Deploy to multiple hosts, stop on first failure
 
 ```sh
-pfor --halt-on-fail 'ssh {} "sudo systemctl restart myapp"' \
-    ::: host1 host2 host3
+pfor --halt-on-fail host in web1 web2 web3 -- ssh {host} sudo systemctl restart myapp
 ```
 
 ### Download URLs from a file
 
 ```sh
-pfor -j 4 'curl -sfSL -o /tmp/{#}.html {}' :::: urls.txt
+pfor -j 4 url in :::: urls.txt -- curl -sfSL -o /tmp/{#}.html {url}
 ```
 
 ### Sequential build with progress tracking
 
 ```sh
-pfor 'make -C {}' ::: lib1 lib2 lib3 app
+pfor dir in lib1 lib2 lib3 app -- make -C {dir}
+```
+
+### Restart services across environments
+
+```sh
+pfor svc in nginx postgres redis -- sudo systemctl restart {svc}
 ```
 
 ## Comparison with other tools
@@ -223,8 +293,32 @@ pfor 'make -C {}' ::: lib1 lib2 lib3 app
 | Live output | ✅ Streams above bar | ✅ (may interleave) | ⚠️ Grouped by default | ✅ |
 | Parallel jobs | ✅ `-j N` | ✅ `-P N` | ✅ `-j N` | ❌ Manual |
 | Shell quoting | ✅ Auto-quoted `{}` | ❌ Manual | ✅ | N/A |
+| Bash-style syntax | ✅ `pfor i in ... --` | ❌ | ❌ | ✅ Native |
+| Named variables | ✅ `{url}`, `{host}` | ❌ | ❌ | ✅ `$var` |
 | Install | Single binary | Built-in | Package manager | Built-in |
 | Halt on fail | ✅ `--halt-on-fail` | ❌ | ✅ `--halt` | `set -e` |
+
+### When to use which syntax
+
+| Use case | Recommended style | Why |
+|----------|-------------------|-----|
+| Quick one-liner | GNU parallel | `pfor 'echo {}' ::: a b c` — compact |
+| Readable scripts | Bash for-loop | `pfor host in ... -- ssh {host} ...` — self-documenting |
+| Piped input | Either | Both support stdin; GNU is shorter, bash names the var |
+| Commands with literal braces | Bash for-loop | `{other}` passes through unless it matches the declared var |
+
+## Caveats
+
+- **`--` in items is not escapable.** If your items literally contain `--`,
+  use an argfile or stdin instead of inline items:
+
+  ```sh
+  # Won't work — pfor sees -- as the separator:
+  pfor i in --verbose --quiet -- echo {i}
+
+  # Workaround — use a file or stdin:
+  printf '%s\n' --verbose --quiet | pfor i -- echo {i}
+  ```
 
 ## License
 
