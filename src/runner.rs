@@ -141,8 +141,8 @@ fn worker_loop(
 ) {
     while let Ok(job) = rx.recv() {
         if halt.load(Ordering::Acquire) {
-            // Drain remaining gracefully without launching more children.
-            continue;
+            // Halt was signaled — stop processing, let the channel drain.
+            break;
         }
         let rendered = template::render(template, &job.item, job.index);
         let ok = spawn_and_stream(&rendered, printer);

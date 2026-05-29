@@ -13,15 +13,15 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let parsed = cli::Cli::parse();
 
-    let (template_str, inline_items, argfile) = match cli::split_rest(parsed.rest) {
-        Ok(t) => t,
+    let args = match cli::split_rest(parsed.rest) {
+        Ok(a) => a,
         Err(e) => {
             eprintln!("pfor: {}", e);
             return ExitCode::from(2);
         }
     };
 
-    let items = match source::resolve(inline_items, argfile) {
+    let items = match source::resolve(args.inline_items, args.argfile) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("pfor: failed to read items: {}", e);
@@ -30,7 +30,9 @@ fn main() -> ExitCode {
     };
 
     let jobs = if parsed.jobs == 0 {
-        num_cpus::get()
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
     } else {
         parsed.jobs
     };
@@ -38,7 +40,7 @@ fn main() -> ExitCode {
     let use_bar = tty::stderr_is_tty();
 
     let summary = runner::run(runner::RunConfig {
-        template: template_str,
+        template: args.template,
         items,
         jobs,
         halt_on_fail: parsed.halt_on_fail,

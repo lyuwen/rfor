@@ -53,13 +53,21 @@ Examples:
   pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
 ";
 
-/// Split `rest` into (template, inline_items, argfile).
+/// Parsed result of splitting positional arguments into their components.
+pub struct SplitArgs {
+    /// The command template string (e.g. `"echo {}"`).
+    pub template: String,
+    /// Inline items provided after `:::`, if any.
+    pub inline_items: Option<Vec<String>>,
+    /// Path to an argfile provided after `::::`, if any.
+    pub argfile: Option<String>,
+}
+
+/// Split `rest` into template, inline items, and argfile.
 ///
 /// Recognizes the `:::` and `::::` separator tokens. Returns an error
 /// string suitable for printing to stderr if the args are malformed.
-pub fn split_rest(
-    rest: Vec<String>,
-) -> Result<(String, Option<Vec<String>>, Option<String>), String> {
+pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
     if rest.is_empty() {
         return Err("missing TEMPLATE argument".into());
     }
@@ -92,14 +100,14 @@ pub fn split_rest(
                     &rest[1..]
                 ));
             }
-            Ok((template, None, None))
+            Ok(SplitArgs { template, inline_items: None, argfile: None })
         }
         (Some(i), Some(":::")) => {
             let items: Vec<String> = rest[i + 1..].to_vec();
             if items.is_empty() {
                 return Err("`:::` provided but no items followed it".into());
             }
-            Ok((template, Some(items), None))
+            Ok(SplitArgs { template, inline_items: Some(items), argfile: None })
         }
         (Some(i), Some("::::")) => {
             let after = &rest[i + 1..];
@@ -109,7 +117,7 @@ pub fn split_rest(
                     after.len()
                 ));
             }
-            Ok((template, None, Some(after[0].clone())))
+            Ok(SplitArgs { template, inline_items: None, argfile: Some(after[0].clone()) })
         }
         _ => unreachable!(),
     }
@@ -121,28 +129,28 @@ mod tests {
 
     #[test]
     fn split_inline() {
-        let (t, i, f) =
+        let s =
             split_rest(vec!["echo {}".into(), ":::".into(), "a".into(), "b".into()]).unwrap();
-        assert_eq!(t, "echo {}");
-        assert_eq!(i.unwrap(), vec!["a", "b"]);
-        assert!(f.is_none());
+        assert_eq!(s.template, "echo {}");
+        assert_eq!(s.inline_items.unwrap(), vec!["a", "b"]);
+        assert!(s.argfile.is_none());
     }
 
     #[test]
     fn split_file() {
-        let (t, i, f) =
+        let s =
             split_rest(vec!["echo {}".into(), "::::".into(), "items.txt".into()]).unwrap();
-        assert_eq!(t, "echo {}");
-        assert!(i.is_none());
-        assert_eq!(f.unwrap(), "items.txt");
+        assert_eq!(s.template, "echo {}");
+        assert!(s.inline_items.is_none());
+        assert_eq!(s.argfile.unwrap(), "items.txt");
     }
 
     #[test]
     fn split_no_sep() {
-        let (t, i, f) = split_rest(vec!["echo {}".into()]).unwrap();
-        assert_eq!(t, "echo {}");
-        assert!(i.is_none());
-        assert!(f.is_none());
+        let s = split_rest(vec!["echo {}".into()]).unwrap();
+        assert_eq!(s.template, "echo {}");
+        assert!(s.inline_items.is_none());
+        assert!(s.argfile.is_none());
     }
 
     #[test]

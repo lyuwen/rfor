@@ -23,44 +23,47 @@ pub fn shell_quote(s: &str) -> String {
 }
 
 /// Render a template by substituting `{}` and `{#}` tokens.
+///
+/// Iterates over `char` boundaries so multi-byte UTF-8 in the template
+/// (e.g. `echo café {}`) passes through without corruption.
 pub fn render(template: &str, item: &str, index: usize) -> String {
-    let bytes = template.as_bytes();
     let mut out = String::with_capacity(template.len() + item.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b == b'{' {
-            if i + 1 < bytes.len() && bytes[i + 1] == b'{' {
-                out.push('{');
-                i += 2;
-                continue;
+    let mut chars = template.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            match chars.peek() {
+                Some('{') => {
+                    chars.next();
+                    out.push('{');
+                }
+                Some('}') => {
+                    chars.next();
+                    out.push_str(&shell_quote(item));
+                }
+                Some('#') => {
+                    // Peek two ahead: need `#` then `}`.
+                    chars.next(); // consume '#'
+                    if chars.peek() == Some(&'}') {
+                        chars.next(); // consume '}'
+                        out.push_str(&index.to_string());
+                    } else {
+                        // Not `{#}`, emit literally.
+                        out.push('{');
+                        out.push('#');
+                    }
+                }
+                _ => out.push('{'),
             }
-            if i + 1 < bytes.len() && bytes[i + 1] == b'}' {
-                out.push_str(&shell_quote(item));
-                i += 2;
-                continue;
-            }
-            if i + 2 < bytes.len() && bytes[i + 1] == b'#' && bytes[i + 2] == b'}' {
-                out.push_str(&index.to_string());
-                i += 3;
-                continue;
-            }
-            out.push('{');
-            i += 1;
-            continue;
-        }
-        if b == b'}' {
-            if i + 1 < bytes.len() && bytes[i + 1] == b'}' {
+        } else if ch == '}' {
+            if chars.peek() == Some(&'}') {
+                chars.next();
                 out.push('}');
-                i += 2;
-                continue;
+            } else {
+                out.push('}');
             }
-            out.push('}');
-            i += 1;
-            continue;
+        } else {
+            out.push(ch);
         }
-        out.push(b as char);
-        i += 1;
     }
     out
 }
@@ -92,5 +95,15 @@ mod tests {
     #[test]
     fn passes_through_unknown_brace() {
         assert_eq!(render("a{x}b", "i", 1), "a{x}b");
+    }
+
+    #[test]
+    fn utf8_template_preserved() {
+        assert_eq!(render("echo café {}", "ñ", 1), "echo café 'ñ'");
+    }
+
+    #[test]
+    fn utf8_emoji_in_template() {
+        assert_eq!(render("🚀 {}", "world", 1), "🚀 'world'");
     }
 }
