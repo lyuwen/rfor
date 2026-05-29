@@ -29,6 +29,10 @@ pub struct RunConfig {
     pub var_name: Option<String>,
     /// Print commands without executing them.
     pub dry_run: bool,
+    /// Buffer each job's output and print as a block on completion.
+    pub group: bool,
+    /// Number of times to retry a failed job before counting it as a failure.
+    pub retries: usize,
 }
 
 /// Result summary returned to main for exit-code computation.
@@ -54,6 +58,8 @@ struct WorkerCtx {
     bar: Option<ProgressBar>,
     var_name: Option<String>,
     dry_run: bool,
+    group: bool,
+    retries: usize,
 }
 
 /// Run all jobs according to `cfg`. Returns the summary.
@@ -76,9 +82,9 @@ pub fn run(cfg: RunConfig) -> RunSummary {
             .progress_chars("=>-"),
         );
         bar.enable_steady_tick(Duration::from_millis(100));
-        (Arc::new(Printer::Bar(mp)), Some(bar))
+        (Arc::new(Printer::bar(mp)), Some(bar))
     } else {
-        (Arc::new(Printer::Plain(std::sync::Mutex::new(()))), None)
+        (Arc::new(Printer::plain()), None)
     };
 
     let failures = Arc::new(AtomicUsize::new(0));
@@ -120,6 +126,8 @@ pub fn run(cfg: RunConfig) -> RunSummary {
             bar: bar_opt.clone(),
             var_name: cfg.var_name.clone(),
             dry_run: cfg.dry_run,
+            group: cfg.group,
+            retries: cfg.retries,
         };
         workers.push(thread::spawn(move || {
             worker_loop(rx, &ctx);
@@ -151,7 +159,39 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
         if ctx.dry_run {
             ctx.printer.println(Stream::Stdout, &rendered);
         } else {
-            let ok = spawn_and_stream(&rendered, &ctx.printer);
+            let max_attempts = ctx.retries + 1;
+            let mut ok = false;
+            for attempt in 1..=max_attempts {
+                if attempt > 1 {
+                    ctx.printer.println(
+                        Stream::Stderr,
+                        &format!(
+                            "pfor: retrying job {index} (attempt {attempt}/{max_attempts})...",
+                            index = job.index,
+                        ),
+                    );
+                }
+                if ctx.group {
+                    let result = spawn_and_collect(&rendered);
+                    ok = result.success;
+                    // If grouped + retries, only emit the final attempt's output.
+                    if ok || attempt == max_attempts {
+                        let mut block: Vec<(Stream, &str)> = Vec::new();
+                        for line in &result.stdout_lines {
+                            block.push((Stream::Stdout, line));
+                        }
+                        for line in &result.stderr_lines {
+                            block.push((Stream::Stderr, line));
+                        }
+                        ctx.printer.println_block(&block);
+                    }
+                } else {
+                    ok = spawn_and_stream(&rendered, &ctx.printer);
+                }
+                if ok {
+                    break;
+                }
+            }
             if !ok {
                 ctx.failures.fetch_add(1, Ordering::AcqRel);
                 if ctx.halt_on_fail {
@@ -162,6 +202,64 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
         if let Some(b) = &ctx.bar {
             b.inc(1);
         }
+    }
+}
+
+/// Output collected from a grouped (buffered) job execution.
+struct CollectedOutput {
+    success: bool,
+    stdout_lines: Vec<String>,
+    stderr_lines: Vec<String>,
+}
+
+/// Spawn `sh -c rendered`, collect all stdout/stderr lines, return them with
+/// the exit status. Used when `--group` is active.
+fn spawn_and_collect(rendered: &str) -> CollectedOutput {
+    let mut child = match Command::new("sh")
+        .arg("-c")
+        .arg(rendered)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return CollectedOutput {
+                success: false,
+                stdout_lines: Vec::new(),
+                stderr_lines: vec![format!("pfor: failed to spawn `sh -c`: {}", e)],
+            };
+        }
+    };
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let t_out = stdout.map(|s| {
+        thread::spawn(move || {
+            BufReader::new(s)
+                .lines()
+                .map_while(Result::ok)
+                .collect::<Vec<String>>()
+        })
+    });
+    let t_err = stderr.map(|s| {
+        thread::spawn(move || {
+            BufReader::new(s)
+                .lines()
+                .map_while(Result::ok)
+                .collect::<Vec<String>>()
+        })
+    });
+
+    let status = child.wait();
+    let stdout_lines = t_out.and_then(|t| t.join().ok()).unwrap_or_default();
+    let stderr_lines = t_err.and_then(|t| t.join().ok()).unwrap_or_default();
+
+    CollectedOutput {
+        success: matches!(status, Ok(s) if s.success()),
+        stdout_lines,
+        stderr_lines,
     }
 }
 

@@ -21,41 +21,71 @@ pub enum Stream {
 /// Where lines should be sent.
 pub enum Printer {
     /// Bar mode: route through MultiProgress so the bar redraws above the line.
-    Bar(MultiProgress),
-    /// Plain mode (no TTY): write directly. A mutex serializes writers so
+    /// The Mutex ensures block-level atomicity for `--group` output — indicatif's
+    /// internal lock only covers individual `println` calls.
+    Bar(MultiProgress, Mutex<()>),
+    /// Plain mode (no TTY): write directly. The mutex serializes writers so
     /// lines from concurrent jobs don't interleave at the byte level.
     Plain(Mutex<()>),
 }
 
 impl Printer {
+    /// Create a new Bar-mode printer.
+    pub fn bar(mp: MultiProgress) -> Self {
+        Printer::Bar(mp, Mutex::new(()))
+    }
+
+    /// Create a new Plain-mode printer.
+    pub fn plain() -> Self {
+        Printer::Plain(Mutex::new(()))
+    }
+
     /// Print one complete line (no trailing newline included) on `stream`.
     /// The printer adds the newline.
     pub fn println(&self, stream: Stream, line: &str) {
         match self {
-            Printer::Bar(mp) => {
-                // indicatif renders the bar on stderr; printing through
-                // MultiProgress::println suspends the bar, writes the line
-                // to stderr, and redraws. We intentionally collapse stdout
-                // and stderr to the same channel here so both stream above
-                // the bar; if a user wants strict stdout/stderr separation
-                // they should redirect off-TTY (then we fall to Plain).
+            Printer::Bar(mp, lock) => {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = mp.println(line);
-                let _ = stream; // both routed via mp.println for ordering
+                let _ = stream;
             }
             Printer::Plain(lock) => {
                 let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-                match stream {
-                    Stream::Stdout => {
-                        let mut out = io::stdout().lock();
-                        let _ = writeln!(out, "{}", line);
-                        let _ = out.flush();
-                    }
-                    Stream::Stderr => {
-                        let mut err = io::stderr().lock();
-                        let _ = writeln!(err, "{}", line);
-                        let _ = err.flush();
-                    }
+                Self::write_line(&stream, line);
+            }
+        }
+    }
+
+    /// Print multiple lines atomically — holds the lock for the entire block
+    /// so no other worker can interleave. Used by `--group` mode.
+    pub fn println_block(&self, lines: &[(Stream, &str)]) {
+        match self {
+            Printer::Bar(mp, lock) => {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+                for (_, line) in lines {
+                    let _ = mp.println(*line);
                 }
+            }
+            Printer::Plain(lock) => {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+                for (stream, line) in lines {
+                    Self::write_line(stream, line);
+                }
+            }
+        }
+    }
+
+    fn write_line(stream: &Stream, line: &str) {
+        match stream {
+            Stream::Stdout => {
+                let mut out = io::stdout().lock();
+                let _ = writeln!(out, "{}", line);
+                let _ = out.flush();
+            }
+            Stream::Stderr => {
+                let mut err = io::stderr().lock();
+                let _ = writeln!(err, "{}", line);
+                let _ = err.flush();
             }
         }
     }

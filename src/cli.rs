@@ -26,6 +26,15 @@ pub struct Cli {
     #[arg(long = "dry-run", action = ArgAction::SetTrue)]
     pub dry_run: bool,
 
+    /// Buffer each job's output and print it as a block when the job completes.
+    /// Prevents interleaving when running parallel jobs.
+    #[arg(long = "group", action = ArgAction::SetTrue)]
+    pub group: bool,
+
+    /// Retry failed jobs up to N times before counting as a failure.
+    #[arg(long = "retries", default_value_t = 0, value_name = "N")]
+    pub retries: usize,
+
     /// Command template plus optional `:::` items or `::::` argfile.
     ///
     /// The first positional is the template (e.g. `'echo {}'`).
@@ -76,6 +85,12 @@ Examples:
 
   # Dry run — see commands without executing
   pfor --dry-run 'echo {}' ::: alpha beta gamma
+
+  # Group output — prevent interleaving with parallel jobs
+  pfor -j 4 --group 'make -C {}' ::: proj1 proj2 proj3
+
+  # Retry failed jobs up to 3 times
+  pfor --retries 3 'curl -sfO {}' ::: url1 url2 url3
 
   # Stop on first failure
   pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
