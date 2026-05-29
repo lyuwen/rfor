@@ -10,16 +10,28 @@
 ///
 /// Each item is checked for `{N..M}` or `{N..M..STEP}` patterns.
 /// Items that don't match are passed through unchanged.
-pub fn expand_items(items: Vec<String>) -> Vec<String> {
+/// Maximum number of items a single brace expansion can produce.
+/// Prevents `{1..999999999}` from consuming all memory.
+const MAX_EXPANSION: usize = 1_000_000;
+
+pub fn expand_items(items: Vec<String>) -> Result<Vec<String>, String> {
     let mut result = Vec::new();
     for item in items {
         if let Some(expanded) = try_expand(&item) {
+            if expanded.len() > MAX_EXPANSION {
+                return Err(format!(
+                    "brace expansion `{}` would produce {} items (max {})",
+                    item,
+                    expanded.len(),
+                    MAX_EXPANSION
+                ));
+            }
             result.extend(expanded);
         } else {
             result.push(item);
         }
     }
-    result
+    Ok(result)
 }
 
 /// Try to expand a single item as a brace expression.
@@ -98,7 +110,15 @@ fn expand_range(start_s: &str, end_s: &str, step_s: Option<&str>) -> Option<Vec<
     // Detect zero-padding: if either start or end has leading zeros.
     let pad_width = zero_pad_width(start_s).max(zero_pad_width(end_s));
 
-    let mut result = Vec::new();
+    // Estimate size and guard against enormous expansions.
+    let count = ((start - end).unsigned_abs() / step as u64) + 1;
+    if count > MAX_EXPANSION as u64 {
+        // Return a large vec that will be caught by the caller's check.
+        // (We don't allocate it — we return enough items to trigger the error.)
+        return Some(vec!["__overflow__".to_string(); MAX_EXPANSION + 1]);
+    }
+
+    let mut result = Vec::with_capacity(count as usize);
     if start <= end {
         let mut n = start;
         while n <= end {
@@ -147,7 +167,7 @@ mod tests {
     #[test]
     fn numeric_ascending() {
         assert_eq!(
-            expand_items(vec!["{1..5}".into()]),
+            expand_items(vec!["{1..5}".into()]).unwrap(),
             vec!["1", "2", "3", "4", "5"]
         );
     }
@@ -155,7 +175,7 @@ mod tests {
     #[test]
     fn numeric_descending() {
         assert_eq!(
-            expand_items(vec!["{5..1}".into()]),
+            expand_items(vec!["{5..1}".into()]).unwrap(),
             vec!["5", "4", "3", "2", "1"]
         );
     }
@@ -163,7 +183,7 @@ mod tests {
     #[test]
     fn numeric_with_step() {
         assert_eq!(
-            expand_items(vec!["{1..10..2}".into()]),
+            expand_items(vec!["{1..10..2}".into()]).unwrap(),
             vec!["1", "3", "5", "7", "9"]
         );
     }
@@ -171,7 +191,7 @@ mod tests {
     #[test]
     fn zero_padded() {
         assert_eq!(
-            expand_items(vec!["{01..05}".into()]),
+            expand_items(vec!["{01..05}".into()]).unwrap(),
             vec!["01", "02", "03", "04", "05"]
         );
     }
@@ -179,7 +199,7 @@ mod tests {
     #[test]
     fn zero_padded_wide() {
         assert_eq!(
-            expand_items(vec!["{001..003}".into()]),
+            expand_items(vec!["{001..003}".into()]).unwrap(),
             vec!["001", "002", "003"]
         );
     }
@@ -187,7 +207,7 @@ mod tests {
     #[test]
     fn alphabetic_ascending() {
         assert_eq!(
-            expand_items(vec!["{a..e}".into()]),
+            expand_items(vec!["{a..e}".into()]).unwrap(),
             vec!["a", "b", "c", "d", "e"]
         );
     }
@@ -195,7 +215,7 @@ mod tests {
     #[test]
     fn alphabetic_descending() {
         assert_eq!(
-            expand_items(vec!["{e..a}".into()]),
+            expand_items(vec!["{e..a}".into()]).unwrap(),
             vec!["e", "d", "c", "b", "a"]
         );
     }
@@ -203,7 +223,7 @@ mod tests {
     #[test]
     fn non_brace_passthrough() {
         assert_eq!(
-            expand_items(vec!["hello".into(), "world".into()]),
+            expand_items(vec!["hello".into(), "world".into()]).unwrap(),
             vec!["hello", "world"]
         );
     }
@@ -211,13 +231,20 @@ mod tests {
     #[test]
     fn mixed_items() {
         assert_eq!(
-            expand_items(vec!["prefix".into(), "{1..3}".into(), "suffix".into()]),
+            expand_items(vec!["prefix".into(), "{1..3}".into(), "suffix".into()]).unwrap(),
             vec!["prefix", "1", "2", "3", "suffix"]
         );
     }
 
     #[test]
     fn single_value_range() {
-        assert_eq!(expand_items(vec!["{5..5}".into()]), vec!["5"]);
+        assert_eq!(expand_items(vec!["{5..5}".into()]).unwrap(), vec!["5"]);
+    }
+
+    #[test]
+    fn enormous_expansion_rejected() {
+        let result = expand_items(vec!["{1..9999999}".into()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("max"));
     }
 }

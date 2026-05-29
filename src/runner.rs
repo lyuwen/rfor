@@ -235,11 +235,29 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
 /// Sanitize an item string for use as a filename component.
 /// Replaces `/` with `_` and truncates to 200 chars.
 fn sanitize_item(item: &str) -> String {
-    let s: String = item.chars().map(|c| if c == '/' { '_' } else { c }).collect();
-    if s.len() > 200 {
-        s[..200].to_string()
+    let s: String = item
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // Collapse runs of underscores and truncate.
+    let collapsed: String = s.chars().fold(String::new(), |mut acc, c| {
+        if c == '_' && acc.ends_with('_') {
+            acc
+        } else {
+            acc.push(c);
+            acc
+        }
+    });
+    if collapsed.len() > 200 {
+        collapsed[..200].to_string()
     } else {
-        s
+        collapsed
     }
 }
 

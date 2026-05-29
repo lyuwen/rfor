@@ -31,7 +31,13 @@ fn main() -> ExitCode {
     };
 
     // Expand brace expressions in items ({1..10}, {a..z}, etc.).
-    let items = expand::expand_items(items);
+    let items = match expand::expand_items(items) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("pfor: {}", e);
+            return ExitCode::from(2);
+        }
+    };
 
     // Create results directory if --results is specified.
     if let Some(ref dir) = parsed.results {
