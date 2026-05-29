@@ -112,12 +112,35 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
     parse_gnu_parallel(rest)
 }
 
+/// Validate that a variable name is a valid identifier: non-empty, starts with
+/// a letter or underscore, contains only `[a-zA-Z0-9_]`.
+fn validate_var_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("variable name cannot be empty".into());
+    }
+    let first = name.chars().next().unwrap();
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return Err(format!(
+            "invalid variable name `{}`: must start with a letter or underscore",
+            name
+        ));
+    }
+    if let Some(bad) = name.chars().find(|c| !c.is_ascii_alphanumeric() && *c != '_') {
+        return Err(format!(
+            "invalid variable name `{}`: contains invalid character `{}`",
+            name, bad
+        ));
+    }
+    Ok(())
+}
+
 /// Parse bash-style with items: `VAR in ITEM... -- COMMAND...`
 ///
 /// Items between `in` and `--` become inline_items, unless they are
 /// `:::: FILE`, in which case they become an argfile reference.
 fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
     let var_name = rest[0].clone();
+    validate_var_name(&var_name)?;
 
     // Find the `--` separator.
     let sep_pos = rest.iter().position(|a| a == "--");
@@ -179,6 +202,7 @@ fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
 /// Parse bash-style with stdin: `VAR -- COMMAND...`
 fn parse_bash_stdin(rest: &[String]) -> Result<SplitArgs, String> {
     let var_name = rest[0].clone();
+    validate_var_name(&var_name)?;
     let cmd_words = &rest[2..];
     if cmd_words.is_empty() {
         return Err("missing command after `--`".into());
