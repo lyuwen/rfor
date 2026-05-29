@@ -134,6 +134,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn worker_loop(
     rx: Receiver<Job>,
     printer: &Arc<Printer>,
