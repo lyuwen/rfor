@@ -82,9 +82,9 @@ pub fn run(cfg: RunConfig) -> RunSummary {
             .progress_chars("=>-"),
         );
         bar.enable_steady_tick(Duration::from_millis(100));
-        (Arc::new(Printer::Bar(mp)), Some(bar))
+        (Arc::new(Printer::bar(mp)), Some(bar))
     } else {
-        (Arc::new(Printer::Plain(std::sync::Mutex::new(()))), None)
+        (Arc::new(Printer::plain()), None)
     };
 
     let failures = Arc::new(AtomicUsize::new(0));

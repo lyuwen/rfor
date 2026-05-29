@@ -21,18 +21,31 @@ pub enum Stream {
 /// Where lines should be sent.
 pub enum Printer {
     /// Bar mode: route through MultiProgress so the bar redraws above the line.
-    Bar(MultiProgress),
-    /// Plain mode (no TTY): write directly. A mutex serializes writers so
+    /// The Mutex ensures block-level atomicity for `--group` output — indicatif's
+    /// internal lock only covers individual `println` calls.
+    Bar(MultiProgress, Mutex<()>),
+    /// Plain mode (no TTY): write directly. The mutex serializes writers so
     /// lines from concurrent jobs don't interleave at the byte level.
     Plain(Mutex<()>),
 }
 
 impl Printer {
+    /// Create a new Bar-mode printer.
+    pub fn bar(mp: MultiProgress) -> Self {
+        Printer::Bar(mp, Mutex::new(()))
+    }
+
+    /// Create a new Plain-mode printer.
+    pub fn plain() -> Self {
+        Printer::Plain(Mutex::new(()))
+    }
+
     /// Print one complete line (no trailing newline included) on `stream`.
     /// The printer adds the newline.
     pub fn println(&self, stream: Stream, line: &str) {
         match self {
-            Printer::Bar(mp) => {
+            Printer::Bar(mp, lock) => {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = mp.println(line);
                 let _ = stream;
             }
@@ -47,10 +60,8 @@ impl Printer {
     /// so no other worker can interleave. Used by `--group` mode.
     pub fn println_block(&self, lines: &[(Stream, &str)]) {
         match self {
-            Printer::Bar(mp) => {
-                // indicatif's MultiProgress::println is internally locked,
-                // but we need atomicity across multiple calls. Suspend the
-                // bar once and write all lines.
+            Printer::Bar(mp, lock) => {
+                let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
                 for (_, line) in lines {
                     let _ = mp.println(*line);
                 }
