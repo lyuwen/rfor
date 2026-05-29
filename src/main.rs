@@ -49,6 +49,7 @@ fn main() -> ExitCode {
         halt_on_fail: parsed.halt_on_fail,
         use_bar,
         var_name: args.var_name,
+        dry_run: parsed.dry_run,
     });
 
     if summary.failures == 0 {

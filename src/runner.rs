@@ -27,6 +27,8 @@ pub struct RunConfig {
     pub use_bar: bool,
     /// Named variable for bash-style syntax (e.g. `i`). `None` for GNU-parallel.
     pub var_name: Option<String>,
+    /// Print commands without executing them.
+    pub dry_run: bool,
 }
 
 /// Result summary returned to main for exit-code computation.
@@ -104,6 +106,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
         let halt_on_fail = cfg.halt_on_fail;
         let bar = bar_opt.clone();
         let var_name = cfg.var_name.clone();
+        let dry_run = cfg.dry_run;
         workers.push(thread::spawn(move || {
             worker_loop(
                 rx,
@@ -114,6 +117,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
                 halt_on_fail,
                 bar.as_ref(),
                 var_name.as_deref(),
+                dry_run,
             );
         }));
     }
@@ -144,6 +148,7 @@ fn worker_loop(
     halt_on_fail: bool,
     bar: Option<&ProgressBar>,
     var_name: Option<&str>,
+    dry_run: bool,
 ) {
     while let Ok(job) = rx.recv() {
         if halt.load(Ordering::Acquire) {
@@ -151,11 +156,15 @@ fn worker_loop(
             break;
         }
         let rendered = template::render(template, &job.item, job.index, var_name);
-        let ok = spawn_and_stream(&rendered, printer);
-        if !ok {
-            failures.fetch_add(1, Ordering::AcqRel);
-            if halt_on_fail {
-                halt.store(true, Ordering::Release);
+        if dry_run {
+            printer.println(Stream::Stdout, &rendered);
+        } else {
+            let ok = spawn_and_stream(&rendered, printer);
+            if !ok {
+                failures.fetch_add(1, Ordering::AcqRel);
+                if halt_on_fail {
+                    halt.store(true, Ordering::Release);
+                }
             }
         }
         if let Some(b) = bar {

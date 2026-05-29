@@ -22,6 +22,10 @@ pub struct Cli {
     #[arg(long = "halt-on-fail", action = ArgAction::SetTrue)]
     pub halt_on_fail: bool,
 
+    /// Print the commands that would be executed without running them.
+    #[arg(long = "dry-run", action = ArgAction::SetTrue)]
+    pub dry_run: bool,
+
     /// Command template plus optional `:::` items or `::::` argfile.
     ///
     /// The first positional is the template (e.g. `'echo {}'`).
@@ -36,6 +40,10 @@ const EXAMPLES: &str = "\
 Tokens in the template:
   {}       current item (shell-quoted automatically)
   {#}      1-based job index
+  {.}      item without extension (photo.tar.gz → photo.tar)
+  {/}      basename of item (/path/to/file.txt → file.txt)
+  {//}     dirname of item (/path/to/file.txt → /path/to)
+  {/.}     basename without extension (/path/to/file.txt → file)
   {var}    named variable (bash-style only, matches declared name)
   {{       literal '{'
   }}       literal '}'
@@ -50,6 +58,10 @@ Examples:
   # GNU parallel style — items from stdin
   printf '%s\\n' a b c | pfor 'echo job {#}: {}'
 
+  # Filename tokens
+  pfor 'echo {.}' ::: photo.tar.gz doc.pdf
+  pfor 'echo {/} is in {//}' ::: /path/to/file.txt
+
   # Bash for-loop style — inline items
   pfor i in a b c -- echo {i}
 
@@ -61,6 +73,9 @@ Examples:
 
   # Bash for-loop style — with flags
   pfor -j 4 i in a b c -- echo {i}
+
+  # Dry run — see commands without executing
+  pfor --dry-run 'echo {}' ::: alpha beta gamma
 
   # Stop on first failure
   pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
