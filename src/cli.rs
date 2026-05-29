@@ -206,14 +206,12 @@ fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
     let var_name = rest[0].clone();
     validate_var_name(&var_name)?;
 
-    // Find the first `--` or `do` separator after index 2.
-    let sep_pos = rest.iter().enumerate().skip(2).find_map(|(i, a)| {
-        if a == "--" || a == "do" {
-            Some(i)
-        } else {
-            None
-        }
-    });
+    // Find separator: prefer `--` over `do` so that literal "do" items work
+    // when the user uses `--` as the separator.
+    let sep_pos = rest.iter().position(|a| a == "--").filter(|&p| p > 1)
+        .or_else(|| rest.iter().enumerate().skip(2).find_map(|(i, a)| {
+            if a == "do" { Some(i) } else { None }
+        }));
     let sep_pos = match sep_pos {
         Some(p) if p > 2 => p,
         Some(2) => {
