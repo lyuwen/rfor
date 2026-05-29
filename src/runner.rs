@@ -12,7 +12,9 @@ use crate::output::{Printer, Stream};
 use crate::template;
 use crossbeam_channel::{bounded, Receiver};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::io::{BufRead, BufReader};
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -33,6 +35,8 @@ pub struct RunConfig {
     pub group: bool,
     /// Number of times to retry a failed job before counting it as a failure.
     pub retries: usize,
+    /// Directory to save each job's stdout/stderr output files.
+    pub results_dir: Option<String>,
 }
 
 /// Result summary returned to main for exit-code computation.
@@ -60,6 +64,7 @@ struct WorkerCtx {
     dry_run: bool,
     group: bool,
     retries: usize,
+    results_dir: Option<String>,
 }
 
 /// Run all jobs according to `cfg`. Returns the summary.
@@ -128,6 +133,7 @@ pub fn run(cfg: RunConfig) -> RunSummary {
             dry_run: cfg.dry_run,
             group: cfg.group,
             retries: cfg.retries,
+            results_dir: cfg.results_dir.clone(),
         };
         workers.push(thread::spawn(move || {
             worker_loop(rx, &ctx);
@@ -161,6 +167,10 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
         } else {
             let max_attempts = ctx.retries + 1;
             let mut ok = false;
+            // When --results or --group is active, we need collected output.
+            let need_collect = ctx.group || ctx.results_dir.is_some();
+            let mut final_result: Option<CollectedOutput> = None;
+
             for attempt in 1..=max_attempts {
                 if attempt > 1 {
                     ctx.printer.println(
@@ -171,19 +181,30 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
                         ),
                     );
                 }
-                if ctx.group {
+                if need_collect {
                     let result = spawn_and_collect(&rendered);
                     ok = result.success;
-                    // If grouped + retries, only emit the final attempt's output.
                     if ok || attempt == max_attempts {
-                        let mut block: Vec<(Stream, &str)> = Vec::new();
-                        for line in &result.stdout_lines {
-                            block.push((Stream::Stdout, line));
+                        // Emit output (grouped or not).
+                        if ctx.group {
+                            let mut block: Vec<(Stream, &str)> = Vec::new();
+                            for line in &result.stdout_lines {
+                                block.push((Stream::Stdout, line));
+                            }
+                            for line in &result.stderr_lines {
+                                block.push((Stream::Stderr, line));
+                            }
+                            ctx.printer.println_block(&block);
+                        } else {
+                            // --results without --group: stream the collected lines.
+                            for line in &result.stdout_lines {
+                                ctx.printer.println(Stream::Stdout, line);
+                            }
+                            for line in &result.stderr_lines {
+                                ctx.printer.println(Stream::Stderr, line);
+                            }
                         }
-                        for line in &result.stderr_lines {
-                            block.push((Stream::Stderr, line));
-                        }
-                        ctx.printer.println_block(&block);
+                        final_result = Some(result);
                     }
                 } else {
                     ok = spawn_and_stream(&rendered, &ctx.printer);
@@ -192,6 +213,12 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
                     break;
                 }
             }
+
+            // Write results files if --results is set.
+            if let (Some(ref dir), Some(ref result)) = (&ctx.results_dir, &final_result) {
+                write_results(dir, job.index, &job.item, result);
+            }
+
             if !ok {
                 ctx.failures.fetch_add(1, Ordering::AcqRel);
                 if ctx.halt_on_fail {
@@ -201,6 +228,55 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
         }
         if let Some(b) = &ctx.bar {
             b.inc(1);
+        }
+    }
+}
+
+/// Sanitize an item string for use as a filename component.
+/// Replaces `/` with `_` and truncates to 200 chars.
+fn sanitize_item(item: &str) -> String {
+    let s: String = item
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // Collapse runs of underscores and truncate.
+    let collapsed: String = s.chars().fold(String::new(), |mut acc, c| {
+        if c == '_' && acc.ends_with('_') {
+            acc
+        } else {
+            acc.push(c);
+            acc
+        }
+    });
+    if collapsed.len() > 200 {
+        collapsed[..200].to_string()
+    } else {
+        collapsed
+    }
+}
+
+/// Write stdout and stderr of a completed job to result files.
+fn write_results(dir: &str, index: usize, item: &str, output: &CollectedOutput) {
+    let safe = sanitize_item(item);
+    let base = format!("{}-{}", index, safe);
+
+    let out_path = Path::new(dir).join(format!("{}.out", base));
+    if let Ok(mut f) = fs::File::create(&out_path) {
+        for line in &output.stdout_lines {
+            let _ = writeln!(f, "{}", line);
+        }
+    }
+
+    let err_path = Path::new(dir).join(format!("{}.err", base));
+    if let Ok(mut f) = fs::File::create(&err_path) {
+        for line in &output.stderr_lines {
+            let _ = writeln!(f, "{}", line);
         }
     }
 }

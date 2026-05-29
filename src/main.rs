@@ -1,6 +1,7 @@
 //! pfor entry point.
 
 mod cli;
+mod expand;
 mod output;
 mod runner;
 mod source;
@@ -29,6 +30,23 @@ fn main() -> ExitCode {
         }
     };
 
+    // Expand brace expressions in items ({1..10}, {a..z}, etc.).
+    let items = match expand::expand_items(items) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("pfor: {}", e);
+            return ExitCode::from(2);
+        }
+    };
+
+    // Create results directory if --results is specified.
+    if let Some(ref dir) = parsed.results {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("pfor: failed to create results directory `{}`: {}", dir, e);
+            return ExitCode::from(2);
+        }
+    }
+
     let jobs = if parsed.jobs == 0 {
         std::thread::available_parallelism()
             .map(|n| n.get())
@@ -52,6 +70,7 @@ fn main() -> ExitCode {
         dry_run: parsed.dry_run,
         group: parsed.group,
         retries: parsed.retries,
+        results_dir: parsed.results,
     });
 
     if summary.failures == 0 {
