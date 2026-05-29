@@ -34,20 +34,33 @@ pub struct Cli {
 
 const EXAMPLES: &str = "\
 Tokens in the template:
-  {}    current item (shell-quoted automatically)
-  {#}   1-based job index
-  {{    literal '{'
-  }}    literal '}'
+  {}       current item (shell-quoted automatically)
+  {#}      1-based job index
+  {var}    named variable (bash-style only, matches declared name)
+  {{       literal '{'
+  }}       literal '}'
 
 Examples:
-  # Inline args (::: form)
+  # GNU parallel style — inline args
   pfor 'echo {}' ::: alpha beta gamma
 
-  # Items from a file (:::: form)
+  # GNU parallel style — items from a file
   pfor -j 4 'curl -sO {}' :::: urls.txt
 
-  # Items from stdin
+  # GNU parallel style — items from stdin
   printf '%s\\n' a b c | pfor 'echo job {#}: {}'
+
+  # Bash for-loop style — inline items
+  pfor i in a b c -- echo {i}
+
+  # Bash for-loop style — with file
+  pfor i in :::: urls.txt -- curl -sO {i}
+
+  # Bash for-loop style — stdin
+  cat items.txt | pfor i -- echo {i}
+
+  # Bash for-loop style — with flags
+  pfor -j 4 i in a b c -- echo {i}
 
   # Stop on first failure
   pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
@@ -58,20 +71,130 @@ Examples:
 pub struct SplitArgs {
     /// The command template string (e.g. `"echo {}"`).
     pub template: String,
-    /// Inline items provided after `:::`, if any.
+    /// Inline items provided after `:::` or between `in` and `--`, if any.
     pub inline_items: Option<Vec<String>>,
     /// Path to an argfile provided after `::::`, if any.
     pub argfile: Option<String>,
+    /// Named variable for bash-style syntax (e.g. `i` in `pfor i in ... -- ...`).
+    /// `None` for GNU-parallel style.
+    pub var_name: Option<String>,
 }
 
-/// Split `rest` into template, inline items, and argfile.
+/// Split `rest` into template, inline items, argfile, and optional variable name.
 ///
-/// Recognizes the `:::` and `::::` separator tokens. Returns an error
-/// string suitable for printing to stderr if the args are malformed.
+/// Detects two syntax families:
+///
+/// **Bash-style:** `VAR in ITEMS -- COMMAND` or `VAR -- COMMAND` (stdin).
+/// The variable name must not contain `{}` or `{#}` (those signal GNU-parallel).
+///
+/// **GNU-parallel style:** `'TEMPLATE' ::: ARGS` / `:::: FILE` / stdin.
+///
+/// Returns an error string suitable for printing to stderr if the args are malformed.
 pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
     if rest.is_empty() {
         return Err("missing TEMPLATE argument".into());
     }
+
+    // Detection: if rest[0] contains {} or {#}, it's a GNU-parallel template.
+    let first = &rest[0];
+    let looks_like_template = first.contains("{}") || first.contains("{#}");
+
+    if !looks_like_template && rest.len() >= 2 {
+        if rest[1] == "in" {
+            return parse_bash_with_items(&rest);
+        }
+        if rest[1] == "--" {
+            return parse_bash_stdin(&rest);
+        }
+    }
+
+    // Fall through to GNU-parallel parsing.
+    parse_gnu_parallel(rest)
+}
+
+/// Parse bash-style with items: `VAR in ITEM... -- COMMAND...`
+///
+/// Items between `in` and `--` become inline_items, unless they are
+/// `:::: FILE`, in which case they become an argfile reference.
+fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
+    let var_name = rest[0].clone();
+
+    // Find the `--` separator.
+    let sep_pos = rest.iter().position(|a| a == "--");
+    let sep_pos = match sep_pos {
+        Some(p) if p > 2 => p, // must be after "VAR in ..."
+        Some(2) => {
+            return Err(format!(
+                "no items between `in` and `--`. \
+                 Did you mean `pfor {} -- COMMAND` to read from stdin?",
+                var_name
+            ));
+        }
+        _ => {
+            return Err(format!(
+                "missing `--` separator. Bash-style syntax: \
+                 pfor {} in ITEMS -- COMMAND",
+                var_name
+            ));
+        }
+    };
+
+    let items_slice = &rest[2..sep_pos];
+    let cmd_words = &rest[sep_pos + 1..];
+    if cmd_words.is_empty() {
+        return Err("missing command after `--`".into());
+    }
+    let template = cmd_words.join(" ");
+
+    // Check if items are actually an argfile reference: `:::: FILE`
+    if items_slice.len() == 2 && items_slice[0] == "::::" {
+        return Ok(SplitArgs {
+            template,
+            inline_items: None,
+            argfile: Some(items_slice[1].clone()),
+            var_name: Some(var_name),
+        });
+    }
+
+    // Check for stray separators in items.
+    if let Some(pos) = items_slice.iter().position(|a| a == ":::") {
+        return Err(format!(
+            "unexpected `:::` in bash-style items at position {}. \
+             Use `:::` only with GNU-parallel syntax.",
+            pos + 2
+        ));
+    }
+    if items_slice.len() == 1 && items_slice[0] == "::::" {
+        return Err("`::::` expects a FILE argument after it".into());
+    }
+
+    Ok(SplitArgs {
+        template,
+        inline_items: Some(items_slice.to_vec()),
+        argfile: None,
+        var_name: Some(var_name),
+    })
+}
+
+/// Parse bash-style with stdin: `VAR -- COMMAND...`
+fn parse_bash_stdin(rest: &[String]) -> Result<SplitArgs, String> {
+    let var_name = rest[0].clone();
+    let cmd_words = &rest[2..];
+    if cmd_words.is_empty() {
+        return Err("missing command after `--`".into());
+    }
+    let template = cmd_words.join(" ");
+
+    Ok(SplitArgs {
+        template,
+        inline_items: None,
+        argfile: None,
+        var_name: Some(var_name),
+    })
+}
+
+/// Parse GNU-parallel style: `TEMPLATE [::: ARGS... | :::: FILE]`
+fn parse_gnu_parallel(rest: Vec<String>) -> Result<SplitArgs, String> {
     let template = rest[0].clone();
 
     // Find first separator.
@@ -92,8 +215,6 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
 
     match (sep_idx, sep_kind) {
         (None, _) => {
-            // Extras without a separator are not allowed; user might be
-            // confused. If they passed more than just the template, error.
             if rest.len() > 1 {
                 return Err(format!(
                     "unexpected positional arguments after TEMPLATE: {:?}. \
@@ -101,14 +222,18 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
                     &rest[1..]
                 ));
             }
-            Ok(SplitArgs { template, inline_items: None, argfile: None })
+            Ok(SplitArgs {
+                template,
+                inline_items: None,
+                argfile: None,
+                var_name: None,
+            })
         }
         (Some(i), Some(":::")) => {
             let items: Vec<String> = rest[i + 1..].to_vec();
             if items.is_empty() {
                 return Err("`:::` provided but no items followed it".into());
             }
-            // Reject if a second separator sneaked into the items.
             if let Some(pos) = items.iter().position(|a| a == "::::" || a == ":::") {
                 return Err(format!(
                     "mixed separators: found `{}` after `:::`. \
@@ -116,7 +241,12 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
                     items[pos]
                 ));
             }
-            Ok(SplitArgs { template, inline_items: Some(items), argfile: None })
+            Ok(SplitArgs {
+                template,
+                inline_items: Some(items),
+                argfile: None,
+                var_name: None,
+            })
         }
         (Some(i), Some("::::")) => {
             let after = &rest[i + 1..];
@@ -126,7 +256,12 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
                     after.len()
                 ));
             }
-            Ok(SplitArgs { template, inline_items: None, argfile: Some(after[0].clone()) })
+            Ok(SplitArgs {
+                template,
+                inline_items: None,
+                argfile: Some(after[0].clone()),
+                var_name: None,
+            })
         }
         _ => unreachable!(),
     }
@@ -136,6 +271,8 @@ pub fn split_rest(rest: Vec<String>) -> Result<SplitArgs, String> {
 mod tests {
     use super::*;
 
+    // --- GNU-parallel style (existing, updated for var_name field) ---
+
     #[test]
     fn split_inline() {
         let s =
@@ -143,6 +280,7 @@ mod tests {
         assert_eq!(s.template, "echo {}");
         assert_eq!(s.inline_items.unwrap(), vec!["a", "b"]);
         assert!(s.argfile.is_none());
+        assert!(s.var_name.is_none());
     }
 
     #[test]
@@ -152,6 +290,7 @@ mod tests {
         assert_eq!(s.template, "echo {}");
         assert!(s.inline_items.is_none());
         assert_eq!(s.argfile.unwrap(), "items.txt");
+        assert!(s.var_name.is_none());
     }
 
     #[test]
@@ -160,6 +299,7 @@ mod tests {
         assert_eq!(s.template, "echo {}");
         assert!(s.inline_items.is_none());
         assert!(s.argfile.is_none());
+        assert!(s.var_name.is_none());
     }
 
     #[test]
@@ -183,5 +323,95 @@ mod tests {
         ]);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("mixed separators"));
+    }
+
+    // --- Bash-style syntax ---
+
+    #[test]
+    fn bash_inline_items() {
+        let s = split_rest(vec![
+            "i".into(), "in".into(), "a".into(), "b".into(), "c".into(),
+            "--".into(), "echo".into(), "{i}".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "echo {i}");
+        assert_eq!(s.inline_items.unwrap(), vec!["a", "b", "c"]);
+        assert!(s.argfile.is_none());
+        assert_eq!(s.var_name.unwrap(), "i");
+    }
+
+    #[test]
+    fn bash_stdin() {
+        let s = split_rest(vec![
+            "url".into(), "--".into(), "curl".into(), "-sO".into(), "{url}".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "curl -sO {url}");
+        assert!(s.inline_items.is_none());
+        assert!(s.argfile.is_none());
+        assert_eq!(s.var_name.unwrap(), "url");
+    }
+
+    #[test]
+    fn bash_argfile() {
+        let s = split_rest(vec![
+            "f".into(), "in".into(), "::::".into(), "urls.txt".into(),
+            "--".into(), "curl".into(), "{f}".into(),
+        ]).unwrap();
+        assert_eq!(s.template, "curl {f}");
+        assert!(s.inline_items.is_none());
+        assert_eq!(s.argfile.unwrap(), "urls.txt");
+        assert_eq!(s.var_name.unwrap(), "f");
+    }
+
+    #[test]
+    fn bash_no_separator_err() {
+        let result = split_rest(vec![
+            "i".into(), "in".into(), "a".into(), "b".into(),
+        ]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("--"));
+    }
+
+    #[test]
+    fn bash_no_command_after_sep_err() {
+        let result = split_rest(vec![
+            "i".into(), "in".into(), "a".into(), "--".into(),
+        ]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("command"));
+    }
+
+    #[test]
+    fn bash_stdin_no_command_err() {
+        let result = split_rest(vec!["i".into(), "--".into()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("command"));
+    }
+
+    #[test]
+    fn bash_empty_items_err() {
+        // `pfor i in -- echo {i}` — no items between in and --
+        let result = split_rest(vec![
+            "i".into(), "in".into(), "--".into(), "echo".into(), "{i}".into(),
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn template_with_braces_goes_gnu() {
+        // rest[0] contains {} → should be treated as GNU-parallel
+        let s = split_rest(vec![
+            "echo {}".into(), ":::".into(), "a".into(),
+        ]).unwrap();
+        assert!(s.var_name.is_none());
+        assert_eq!(s.template, "echo {}");
+    }
+
+    #[test]
+    fn template_with_index_goes_gnu() {
+        // rest[0] contains {#} → should be treated as GNU-parallel
+        let s = split_rest(vec![
+            "echo {#}".into(), ":::".into(), "a".into(),
+        ]).unwrap();
+        assert!(s.var_name.is_none());
     }
 }
