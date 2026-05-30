@@ -1,15 +1,15 @@
-//! TTY detection: when stdout/stderr are not a TTY (e.g. piped), pfor must
+//! TTY detection: when stdout/stderr are not a TTY (e.g. piped), rfor must
 //! not emit ANSI escape sequences (no progress bar rendering in pipes).
 //!
-//! `assert_cmd` runs pfor with piped stdio, so these tests naturally exercise
+//! `assert_cmd` runs rfor with piped stdio, so these tests naturally exercise
 //! the off-TTY code path.
 
 mod common;
-use common::{pfor, ANSI_CSI};
+use common::{rfor, ANSI_CSI};
 
 #[test]
 fn stdout_has_no_ansi_escapes_when_piped() {
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -25,7 +25,7 @@ fn stdout_has_no_ansi_escapes_when_piped() {
 fn stderr_has_no_ansi_escapes_when_piped() {
     // Even with parallel jobs (which would show a progress bar on a TTY),
     // stderr must be clean when piped.
-    let out = pfor()
+    let out = rfor()
         .args(["-j", "2", "echo {}", ":::", "a", "b", "c", "d"])
         .assert()
         .success();
@@ -39,9 +39,9 @@ fn stderr_has_no_ansi_escapes_when_piped() {
 
 #[test]
 fn output_is_plain_text_machine_readable() {
-    // Combined stdout from pfor must be parseable as plain text — no
+    // Combined stdout from rfor must be parseable as plain text — no
     // carriage returns (\r) from progress bar redraws sneaking in.
-    let out = pfor()
+    let out = rfor()
         .args(["-j", "4", "echo {}", ":::", "1", "2", "3", "4", "5", "6"])
         .assert()
         .success();
@@ -62,7 +62,7 @@ fn large_parallel_batch_stays_clean() {
     let mut args: Vec<&str> = vec!["-j", "8", "echo {}", ":::"];
     args.extend(items.iter().map(|s| s.as_str()));
 
-    let out = pfor().args(args).assert().success();
+    let out = rfor().args(args).assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
 

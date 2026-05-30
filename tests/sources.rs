@@ -1,7 +1,7 @@
 //! Argument sources: `:::`, `::::`, stdin, and empty input.
 
 mod common;
-use common::pfor;
+use common::rfor;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -13,7 +13,7 @@ fn sorted_lines(s: &str) -> Vec<String> {
 
 #[test]
 fn triple_colon_introduces_literal_args() {
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -29,7 +29,7 @@ fn quadruple_colon_reads_items_from_file() {
     writeln!(f, "three").unwrap();
     f.flush().unwrap();
 
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", "::::"])
         .arg(f.path())
         .assert()
@@ -40,7 +40,7 @@ fn quadruple_colon_reads_items_from_file() {
 
 #[test]
 fn stdin_one_item_per_line() {
-    let out = pfor()
+    let out = rfor()
         .arg("echo {}")
         .write_stdin("foo\nbar\nbaz\n")
         .assert()
@@ -51,7 +51,7 @@ fn stdin_one_item_per_line() {
 
 #[test]
 fn stdin_without_trailing_newline_is_still_a_job() {
-    let out = pfor()
+    let out = rfor()
         .arg("echo {}")
         .write_stdin("only")
         .assert()
@@ -62,7 +62,7 @@ fn stdin_without_trailing_newline_is_still_a_job() {
 
 #[test]
 fn empty_stdin_produces_zero_jobs_and_exits_zero() {
-    let out = pfor().arg("echo {}").write_stdin("").assert().success();
+    let out = rfor().arg("echo {}").write_stdin("").assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(
         stdout.trim().is_empty(),
@@ -74,7 +74,7 @@ fn empty_stdin_produces_zero_jobs_and_exits_zero() {
 #[test]
 fn empty_argfile_produces_zero_jobs_and_exits_zero() {
     let f = NamedTempFile::new().unwrap();
-    pfor()
+    rfor()
         .args(["echo {}", "::::"])
         .arg(f.path())
         .assert()
@@ -85,7 +85,7 @@ fn empty_argfile_produces_zero_jobs_and_exits_zero() {
 fn triple_colon_wins_over_stdin() {
     // Spec implies `:::` takes precedence over stdin. If implementer disagrees,
     // tester escalates to architect (see TEST_NOTES.md).
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "x", "y"])
         .write_stdin("from-stdin-1\nfrom-stdin-2\n")
         .assert()
@@ -110,7 +110,7 @@ fn argfile_blank_lines_are_handled() {
     writeln!(f, "beta").unwrap();
     f.flush().unwrap();
 
-    let out = pfor()
+    let out = rfor()
         .args(["echo [{}]", "::::"])
         .arg(f.path())
         .assert()

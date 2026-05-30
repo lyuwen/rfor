@@ -1,4 +1,4 @@
-//! pfor entry point.
+//! rfor entry point.
 
 mod cli;
 mod expand;
@@ -17,7 +17,7 @@ fn main() -> ExitCode {
     let args = match cli::split_rest(parsed.rest) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("pfor: {}", e);
+            eprintln!("rfor: {}", e);
             return ExitCode::from(2);
         }
     };
@@ -25,7 +25,7 @@ fn main() -> ExitCode {
     let items = match source::resolve(args.inline_items, args.argfile) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("pfor: failed to read items: {}", e);
+            eprintln!("rfor: failed to read items: {}", e);
             return ExitCode::from(2);
         }
     };
@@ -34,7 +34,7 @@ fn main() -> ExitCode {
     let items = match expand::expand_items(items) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("pfor: {}", e);
+            eprintln!("rfor: {}", e);
             return ExitCode::from(2);
         }
     };
@@ -42,7 +42,7 @@ fn main() -> ExitCode {
     // Create results directory if --results is specified.
     if let Some(ref dir) = parsed.results {
         if let Err(e) = std::fs::create_dir_all(dir) {
-            eprintln!("pfor: failed to create results directory `{}`: {}", dir, e);
+            eprintln!("rfor: failed to create results directory `{}`: {}", dir, e);
             return ExitCode::from(2);
         }
     }
@@ -57,7 +57,7 @@ fn main() -> ExitCode {
 
     let use_bar = tty::stderr_is_tty();
 
-    // Warn once if the template uses GNU parallel tokens pfor doesn't support.
+    // Warn once if the template uses GNU parallel tokens rfor doesn't support.
     template::warn_unsupported_tokens(&args.template, args.var_name.as_deref());
 
     let summary = runner::run(runner::RunConfig {

@@ -4,7 +4,7 @@
 //! Tests will fail until implementation lands.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 fn sorted_lines(s: &str) -> Vec<String> {
     let mut v: Vec<String> = s.lines().map(|l| l.to_string()).collect();
@@ -18,7 +18,7 @@ fn sorted_lines(s: &str) -> Vec<String> {
 fn dot_token_strips_extension() {
     // `{.}` = item without the last extension.
     // `photo.jpg` → `photo`
-    let out = pfor()
+    let out = rfor()
         .args(["echo {.}", ":::", "photo.jpg"])
         .assert()
         .success();
@@ -29,7 +29,7 @@ fn dot_token_strips_extension() {
 #[test]
 fn dot_token_strips_only_last_extension() {
     // `archive.tar.gz` → `archive.tar` (only last `.gz` stripped).
-    let out = pfor()
+    let out = rfor()
         .args(["echo {.}", ":::", "archive.tar.gz"])
         .assert()
         .success();
@@ -43,7 +43,7 @@ fn dot_token_strips_only_last_extension() {
 fn slash_token_gives_basename() {
     // `{/}` = basename of the item.
     // `/path/to/file.txt` → `file.txt`
-    let out = pfor()
+    let out = rfor()
         .args(["echo {/}", ":::", "/path/to/file.txt"])
         .assert()
         .success();
@@ -57,7 +57,7 @@ fn slash_token_gives_basename() {
 fn double_slash_token_gives_dirname() {
     // `{//}` = directory part of the item.
     // `/path/to/file.txt` → `/path/to`
-    let out = pfor()
+    let out = rfor()
         .args(["echo {//}", ":::", "/path/to/file.txt"])
         .assert()
         .success();
@@ -71,7 +71,7 @@ fn double_slash_token_gives_dirname() {
 fn slash_dot_token_gives_basename_no_ext() {
     // `{/.}` = basename without extension.
     // `/path/to/file.txt` → `file`
-    let out = pfor()
+    let out = rfor()
         .args(["echo {/.}", ":::", "/path/to/file.txt"])
         .assert()
         .success();
@@ -84,7 +84,7 @@ fn slash_dot_token_gives_basename_no_ext() {
 #[test]
 fn dot_token_no_extension_returns_item() {
     // `{.}` on an item without an extension → returns the item unchanged.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {.}", ":::", "noext"])
         .assert()
         .success();
@@ -97,7 +97,7 @@ fn dot_token_no_extension_returns_item() {
 #[test]
 fn double_slash_token_no_directory_returns_dot() {
     // `{//}` on a bare filename → `.` (current directory, matching GNU parallel).
-    let out = pfor()
+    let out = rfor()
         .args(["echo {//}", ":::", "file.txt"])
         .assert()
         .success();
@@ -110,9 +110,9 @@ fn double_slash_token_no_directory_returns_dot() {
 
 #[test]
 fn all_tokens_together() {
-    // `pfor 'echo {} {.} {/} {//} {/.}' ::: /tmp/test.log`
+    // `rfor 'echo {} {.} {/} {//} {/.}' ::: /tmp/test.log`
     // Expected: `/tmp/test.log /tmp/test test.log /tmp test`
-    let out = pfor()
+    let out = rfor()
         .args(["echo {} {.} {/} {//} {/.}", ":::", "/tmp/test.log"])
         .assert()
         .success();
@@ -129,9 +129,9 @@ fn all_tokens_together() {
 
 #[test]
 fn filename_tokens_with_bash_style() {
-    // `pfor f in a.txt b.jpg -- echo {.}`
+    // `rfor f in a.txt b.jpg -- echo {.}`
     // Should strip extensions: `a` and `b`
-    let out = pfor()
+    let out = rfor()
         .args(["f", "in", "a.txt", "b.jpg", "--", "echo", "{.}"])
         .assert()
         .success();
@@ -144,7 +144,7 @@ fn filename_tokens_with_bash_style() {
 #[test]
 fn existing_tokens_work_alongside_filename_tokens() {
     // `{}` and `{#}` must still work when filename tokens are also present.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {#} {} {.}", ":::", "doc.pdf"])
         .assert()
         .success();

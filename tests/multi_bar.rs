@@ -8,14 +8,14 @@
 //! and doesn't leak ANSI to piped output.
 
 mod common;
-use common::{pfor, ANSI_CSI};
+use common::{rfor, ANSI_CSI};
 
 // ─── 1. Flag is accepted ─────────────────────────────────────────────
 
 #[test]
 fn multi_bar_flag_accepted() {
-    // `pfor --multi-bar -j 2 'echo {}' ::: a b` runs without error.
-    let out = pfor()
+    // `rfor --multi-bar -j 2 'echo {}' ::: a b` runs without error.
+    let out = rfor()
         .args(["--multi-bar", "-j", "2", "echo {}", ":::", "a", "b"])
         .assert()
         .success();
@@ -30,7 +30,7 @@ fn multi_bar_flag_accepted() {
 #[test]
 fn default_single_bar_unchanged() {
     // Without --multi-bar, behavior is the same as before.
-    let out = pfor()
+    let out = rfor()
         .args(["-j", "2", "echo {}", ":::", "x", "y"])
         .assert()
         .success();
@@ -45,7 +45,7 @@ fn default_single_bar_unchanged() {
 #[test]
 fn multi_bar_with_sequential_no_crash() {
     // -j 1 + --multi-bar shouldn't crash (graceful single-worker case).
-    let out = pfor()
+    let out = rfor()
         .args(["--multi-bar", "-j", "1", "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -59,7 +59,7 @@ fn multi_bar_with_sequential_no_crash() {
 #[test]
 fn multi_bar_with_dry_run() {
     // --multi-bar + --dry-run: dry-run still prints commands, no conflict.
-    let out = pfor()
+    let out = rfor()
         .args(["--multi-bar", "--dry-run", "-j", "2", "echo {}", ":::", "a", "b"])
         .assert()
         .success();
@@ -75,7 +75,7 @@ fn multi_bar_with_dry_run() {
 #[test]
 fn multi_bar_with_group() {
     // --multi-bar + --group: both flags accepted, output correct.
-    let out = pfor()
+    let out = rfor()
         .args([
             "--multi-bar", "--group", "-j", "2",
             "echo {}", ":::", "a", "b", "c",
@@ -93,7 +93,7 @@ fn multi_bar_with_group() {
 #[test]
 fn multi_bar_no_ansi_when_piped() {
     // When piped (non-TTY), --multi-bar should not leak ANSI escapes.
-    let out = pfor()
+    let out = rfor()
         .args([
             "--multi-bar", "-j", "4",
             "echo {}", ":::", "a", "b", "c", "d",

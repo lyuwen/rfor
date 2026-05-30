@@ -1,14 +1,14 @@
-# pfor v1 — Usability Test Report
+# rfor v1 — Usability Test Report
 
 **Author:** Instructor  
 **Date:** 2026-05-29  
-**Methodology:** 10 scenarios dispatched to a naive user (Noob agent) who had never seen pfor before. The Noob used ONLY `pfor --help`, `README.md`, and error messages — no source code.
+**Methodology:** 10 scenarios dispatched to a naive user (Noob agent) who had never seen rfor before. The Noob used ONLY `rfor --help`, `README.md`, and error messages — no source code.
 
 ---
 
 ## Executive Summary
 
-**pfor v1 is exceptionally usable.** The Noob completed all 10 scenarios — every single task worked on the first try. The help text, README, and CLI syntax are clear enough that a developer familiar with bash `for` loops or GNU parallel can be productive within seconds. Overall score: **4.7/5**.
+**rfor v1 is exceptionally usable.** The Noob completed all 10 scenarios — every single task worked on the first try. The help text, README, and CLI syntax are clear enough that a developer familiar with bash `for` loops or GNU parallel can be productive within seconds. Overall score: **4.7/5**.
 
 Two silent-wrong-result footguns were identified that should be fixed before release: unsupported GNU parallel tokens (`{.}`, `{/}`) pass through silently, and mixing `:::` + `::::` in one command doesn't error.
 
@@ -39,14 +39,14 @@ Two silent-wrong-result footguns were identified that should be fixed before rel
 
 **What happened:** When the Noob ran:
 ```bash
-pfor 'echo {}' ::: a b :::: /tmp/pfor-test/input/fruits.txt
+rfor 'echo {}' ::: a b :::: /tmp/rfor-test/input/fruits.txt
 ```
-…pfor treated `::::` and the filepath as literal inline items rather than erroring. Output:
+…rfor treated `::::` and the filepath as literal inline items rather than erroring. Output:
 ```
 a
 b
 ::::
-/tmp/pfor-test/input/fruits.txt
+/tmp/rfor-test/input/fruits.txt
 ```
 
 **Impact:** A user who tries to combine input sources gets wrong results with no warning. The README says "exactly one per invocation" but the tool doesn't enforce it.
@@ -59,7 +59,7 @@ b
 
 **What happened:** When the Noob ran:
 ```bash
-pfor 'echo {.}' ::: test.txt
+rfor 'echo {.}' ::: test.txt
 ```
 …the output was literally `{.}` — no warning, no error. A GNU parallel user would expect `test` (filename without extension).
 
@@ -67,14 +67,14 @@ pfor 'echo {.}' ::: test.txt
 
 **Recommendation:** Detect known GNU parallel tokens in templates and print a stderr warning:
 ```
-pfor: warning: '{.}' is not a supported token (did you mean '{}'?). Supported: {}, {#}, {{, }}
+rfor: warning: '{.}' is not a supported token (did you mean '{}'?). Supported: {}, {#}, {{, }}
 ```
 
 ---
 
 ### 🟡 Issue 3: No `--dry-run` flag (MINOR)
 
-**What happened:** `pfor --dry-run 'echo {}' ::: a b c` → error: unrecognized flag.
+**What happened:** `rfor --dry-run 'echo {}' ::: a b c` → error: unrecognized flag.
 
 **Impact:** Users want to preview expanded commands before running them, especially with complex templates. This is a standard CLI expectation.
 
@@ -148,41 +148,41 @@ pfor: warning: '{.}' is not a supported token (did you mean '{}'?). Supported: {
 ### Commands the Noob tried (all first-try successes):
 ```bash
 # Scenario 1
-pfor --help
-pfor -h
-pfor --version
+rfor --help
+rfor -h
+rfor --version
 
 # Scenario 2
-pfor 'echo {}' ::: hello world foo
+rfor 'echo {}' ::: hello world foo
 
 # Scenario 3
-pfor 'echo {#}: {}' ::: apple banana cherry
+rfor 'echo {#}: {}' ::: apple banana cherry
 
 # Scenario 4
-pfor 'echo {}' :::: /tmp/pfor-test/input/fruits.txt
+rfor 'echo {}' :::: /tmp/rfor-test/input/fruits.txt
 
 # Scenario 5
-ls /tmp/pfor-test/input/*.txt | pfor 'wc -l {}'
+ls /tmp/rfor-test/input/*.txt | rfor 'wc -l {}'
 
 # Scenario 6
-time pfor -j 5 'sleep 1 && echo {}' ::: 1 2 3 4 5
+time rfor -j 5 'sleep 1 && echo {}' ::: 1 2 3 4 5
 
 # Scenario 7
-pfor 'sleep 2 && echo done: {}' ::: a b c d e
+rfor 'sleep 2 && echo done: {}' ::: a b c d e
 
 # Scenario 8a
-pfor 'ls {}' ::: /tmp /nonexistent_path_xyz /home; echo $?
+rfor 'ls {}' ::: /tmp /nonexistent_path_xyz /home; echo $?
 # Scenario 8b
-pfor --halt-on-fail 'ls {}' ::: /tmp /nonexistent_path_xyz /home
+rfor --halt-on-fail 'ls {}' ::: /tmp /nonexistent_path_xyz /home
 
 # Scenario 9
-ls /tmp/pfor-test/input/file*.txt | pfor -j 3 'gzip {}'
+ls /tmp/rfor-test/input/file*.txt | rfor -j 3 'gzip {}'
 
 # Scenario 10
-timeout 3 pfor                                    # clear error, exit 2
-pfor 'echo {.}' ::: test.txt                      # silent pass-through
-pfor --dry-run 'echo {}' ::: a b c                # unrecognized flag error
-pfor 'echo {}' ::: a b :::: fruits.txt            # silent wrong results
+timeout 3 rfor                                    # clear error, exit 2
+rfor 'echo {.}' ::: test.txt                      # silent pass-through
+rfor --dry-run 'echo {}' ::: a b c                # unrecognized flag error
+rfor 'echo {}' ::: a b :::: fruits.txt            # silent wrong results
 ```
 
 ### Notable: zero wrong attempts across all 10 scenarios.

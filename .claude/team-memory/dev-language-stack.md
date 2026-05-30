@@ -1,4 +1,4 @@
-# Language & stack — pfor
+# Language & stack — rfor
 
 **Decided by user, 2026-05-29.**
 

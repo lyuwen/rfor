@@ -4,14 +4,14 @@
 //! items like `{1..5}` expand into `1 2 3 4 5` before template substitution.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 // ─── 1. Numeric range ─────────────────────────────────────────────────
 
 #[test]
 fn brace_expansion_numeric_range() {
     // `{1..5}` → items 1, 2, 3, 4, 5
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{1..5}"])
         .assert()
         .success();
@@ -25,7 +25,7 @@ fn brace_expansion_numeric_range() {
 #[test]
 fn brace_expansion_reverse_range() {
     // `{5..1}` → items 5, 4, 3, 2, 1
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{5..1}"])
         .assert()
         .success();
@@ -39,7 +39,7 @@ fn brace_expansion_reverse_range() {
 #[test]
 fn brace_expansion_with_step() {
     // `{1..10..3}` → items 1, 4, 7, 10
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{1..10..3}"])
         .assert()
         .success();
@@ -53,7 +53,7 @@ fn brace_expansion_with_step() {
 #[test]
 fn brace_expansion_zero_padded() {
     // `{01..05}` → items 01, 02, 03, 04, 05
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{01..05}"])
         .assert()
         .success();
@@ -67,7 +67,7 @@ fn brace_expansion_zero_padded() {
 #[test]
 fn brace_expansion_alphabetic() {
     // `{a..e}` → items a, b, c, d, e
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{a..e}"])
         .assert()
         .success();
@@ -81,7 +81,7 @@ fn brace_expansion_alphabetic() {
 #[test]
 fn brace_expansion_mixed_with_regular_items() {
     // `{1..3} hello` → items 1, 2, 3, hello
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{1..3}", "hello"])
         .assert()
         .success();
@@ -94,8 +94,8 @@ fn brace_expansion_mixed_with_regular_items() {
 
 #[test]
 fn brace_expansion_with_bash_style() {
-    // `pfor i in {1..3} -- echo {i}` → outputs 1, 2, 3
-    let out = pfor()
+    // `rfor i in {1..3} -- echo {i}` → outputs 1, 2, 3
+    let out = rfor()
         .args(["i", "in", "{1..3}", "--", "echo", "{i}"])
         .assert()
         .success();
@@ -109,7 +109,7 @@ fn brace_expansion_with_bash_style() {
 #[test]
 fn non_range_brace_pattern_passes_through() {
     // `{notarange}` should not be expanded — treated as a literal item.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "{notarange}"])
         .assert()
         .success();

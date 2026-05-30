@@ -1,12 +1,12 @@
-# pfor v1 scope (user-approved 2026-05-29)
+# rfor v1 scope (user-approved 2026-05-29)
 
-**Binary name:** `pfor`
+**Binary name:** `rfor`
 
 **Syntax (GNU-parallel-style):**
 ```
-pfor [flags] '<command template>' ::: arg1 arg2 ...
-pfor [flags] '<command template>' :::: argfile
-<stdin> | pfor [flags] '<command template>'
+rfor [flags] '<command template>' ::: arg1 arg2 ...
+rfor [flags] '<command template>' :::: argfile
+<stdin> | rfor [flags] '<command template>'
 ```
 
 **Tokens:** `{}` (item), `{#}` (1-based job index). Defer `{.}`, `{/}`, `{//}`.
@@ -29,6 +29,6 @@ pfor [flags] '<command template>' :::: argfile
 `{.}`/`{/}`/`{//}` filename tokens, `--results` directory, `--retries`, multi-bar per-job display, `--group` output buffering, `--dry-run`, shell-style `for i in ...; do ...; done` syntax.
 
 **Branching:**
-- `dev/pfor` — delivery branch, PR target into main
-- `feat/pfor-core` — implementer worktree
-- `test/pfor-core` — tester worktree
+- `dev/rfor` — delivery branch, PR target into main
+- `feat/rfor-core` — implementer worktree
+- `test/rfor-core` — tester worktree

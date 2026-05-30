@@ -2,7 +2,7 @@
 //! output atomicity under concurrency.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 #[test]
 fn parallel_is_faster_than_sequential_on_sleeping_jobs() {
@@ -12,7 +12,7 @@ fn parallel_is_faster_than_sequential_on_sleeping_jobs() {
 
     // Sequential baseline timing
     let seq_start = std::time::Instant::now();
-    pfor()
+    rfor()
         .args(["-j", "1", "sleep 0.5"])
         .arg(":::")
         .args(&items)
@@ -22,7 +22,7 @@ fn parallel_is_faster_than_sequential_on_sleeping_jobs() {
 
     // Parallel timing
     let par_start = std::time::Instant::now();
-    pfor()
+    rfor()
         .args(["-j", "4", "sleep 0.5"])
         .arg(":::")
         .args(&items)
@@ -46,7 +46,7 @@ fn jobs_zero_means_num_cpus_and_runs_in_parallel() {
     // On most CI (4+ cores): ~0.6s.
     // We just verify it finishes in under 2.0s (sequential would be ~2.4s).
     let start = std::time::Instant::now();
-    pfor()
+    rfor()
         .args(["-j", "0", "sleep 0.3"])
         .arg(":::")
         .args(["1", "2", "3", "4", "5", "6", "7", "8"])
@@ -66,7 +66,7 @@ fn parallel_j2_limits_concurrency() {
     // Optimal: 2 rounds × 0.3s = 0.6s. Sequential: 1.2s.
     // We check it's faster than sequential but still takes real time.
     let start = std::time::Instant::now();
-    pfor()
+    rfor()
         .args(["-j", "2", "sleep 0.3", ":::", "a", "b", "c", "d"])
         .assert()
         .success();
@@ -83,7 +83,7 @@ fn parallel_j2_limits_concurrency() {
 fn per_line_output_is_atomic_under_parallel() {
     // Each job prints a single line. Under -j 4, lines must not interleave
     // mid-line (no partial lines or mixed characters).
-    let out = pfor()
+    let out = rfor()
         .args([
             "-j", "4",
             "echo AAAA-{}-ZZZZ",
@@ -105,7 +105,7 @@ fn per_line_output_is_atomic_under_parallel() {
 #[test]
 fn parallel_produces_all_outputs() {
     // All items must appear in output regardless of scheduling order.
-    let out = pfor()
+    let out = rfor()
         .args(["-j", "4", "echo {}", ":::", "p", "q", "r", "s", "t"])
         .assert()
         .success();

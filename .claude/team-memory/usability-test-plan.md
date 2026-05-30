@@ -1,4 +1,4 @@
-# pfor v1 Usability Test Plan
+# rfor v1 Usability Test Plan
 
 **Author:** Instructor agent  
 **Date:** 2026-05-29  
@@ -10,8 +10,8 @@
 
 The Noob agent simulates a developer who:
 - Has used bash `for` loops and maybe heard of GNU parallel
-- Has never seen `pfor` before
-- Will rely **only** on `pfor --help` and the project README to figure things out
+- Has never seen `rfor` before
+- Will rely **only** on `rfor --help` and the project README to figure things out
 - Will type commands exactly as they understand them (mistakes are signal, not noise)
 
 **What we're testing:** Can a first-time user accomplish real tasks using only the docs?  
@@ -22,13 +22,13 @@ The Noob agent simulates a developer who:
 ## Test Environment Setup
 
 Before dispatching to the Noob, ensure:
-1. `pfor` binary is built and on PATH (or provide the exact path)
+1. `rfor` binary is built and on PATH (or provide the exact path)
 2. Create a scratch directory with test fixtures:
 
 ```bash
-mkdir -p /tmp/pfor-test/input
-echo -e "apple\nbanana\ncherry\ndate\nelderberry" > /tmp/pfor-test/input/fruits.txt
-for i in 1 2 3 4 5; do echo "line $i" > /tmp/pfor-test/input/file$i.txt; done
+mkdir -p /tmp/rfor-test/input
+echo -e "apple\nbanana\ncherry\ndate\nelderberry" > /tmp/rfor-test/input/fruits.txt
+for i in 1 2 3 4 5; do echo "line $i" > /tmp/rfor-test/input/file$i.txt; done
 ```
 
 ---
@@ -37,15 +37,15 @@ for i in 1 2 3 4 5; do echo "line $i" > /tmp/pfor-test/input/file$i.txt; done
 
 ### Scenario 1: Discovery — "What is this tool?"
 
-**Goal:** User learns what pfor does and how to use it.  
+**Goal:** User learns what rfor does and how to use it.  
 **Motivation:** Every CLI journey starts with `--help`.
 
 **Task for Noob:**
-> You just installed a tool called `pfor`. Figure out what it does and what flags are available. Then tell me the basic syntax.
+> You just installed a tool called `rfor`. Figure out what it does and what flags are available. Then tell me the basic syntax.
 
 **Expected approach:**
-- Run `pfor --help` (or `pfor -h`)
-- Run `pfor --version` (or `pfor -V`)
+- Run `rfor --help` (or `rfor -h`)
+- Run `rfor --version` (or `rfor -V`)
 
 **Success criteria:**
 - [ ] `--help` output is clear enough that the Noob can describe the syntax
@@ -54,7 +54,7 @@ for i in 1 2 3 4 5; do echo "line $i" > /tmp/pfor-test/input/file$i.txt; done
 - [ ] The Noob identifies `-j` and `--halt-on-fail` flags
 
 **Usability signals to watch:**
-- Does the Noob try `pfor` with no args first? What happens?
+- Does the Noob try `rfor` with no args first? What happens?
 - Is the help text scannable or overwhelming?
 - Does the Noob confuse `:::` with `::::` ?
 
@@ -62,15 +62,15 @@ for i in 1 2 3 4 5; do echo "line $i" > /tmp/pfor-test/input/file$i.txt; done
 
 ### Scenario 2: Hello World — "Run a command for each item"
 
-**Goal:** Replace a simple `for i in a b c; do echo $i; done` with pfor.  
+**Goal:** Replace a simple `for i in a b c; do echo $i; done` with rfor.  
 **Motivation:** The #1 use case — the reason the tool exists.
 
 **Task for Noob:**
-> Using pfor, echo each of the words "hello", "world", "foo" on its own line. The equivalent bash would be: `for i in hello world foo; do echo $i; done`
+> Using rfor, echo each of the words "hello", "world", "foo" on its own line. The equivalent bash would be: `for i in hello world foo; do echo $i; done`
 
 **Expected command:**
 ```bash
-pfor 'echo {}' ::: hello world foo
+rfor 'echo {}' ::: hello world foo
 ```
 
 **Success criteria:**
@@ -91,7 +91,7 @@ pfor 'echo {}' ::: hello world foo
 **Motivation:** Users often want numbered output (e.g., "Processing item 3 of 5").
 
 **Task for Noob:**
-> Using pfor, print a numbered list like:
+> Using rfor, print a numbered list like:
 > ```
 > 1: apple
 > 2: banana
@@ -101,7 +101,7 @@ pfor 'echo {}' ::: hello world foo
 
 **Expected command:**
 ```bash
-pfor 'echo {#}: {}' ::: apple banana cherry
+rfor 'echo {#}: {}' ::: apple banana cherry
 ```
 
 **Success criteria:**
@@ -121,11 +121,11 @@ pfor 'echo {#}: {}' ::: apple banana cherry
 **Motivation:** Real workloads come from files (server lists, URLs, etc.).
 
 **Task for Noob:**
-> You have a file at `/tmp/pfor-test/input/fruits.txt` with one fruit per line. Using pfor, run `echo {}` for each fruit in that file.
+> You have a file at `/tmp/rfor-test/input/fruits.txt` with one fruit per line. Using rfor, run `echo {}` for each fruit in that file.
 
 **Expected command:**
 ```bash
-pfor 'echo {}' :::: /tmp/pfor-test/input/fruits.txt
+rfor 'echo {}' :::: /tmp/rfor-test/input/fruits.txt
 ```
 
 **Success criteria:**
@@ -134,26 +134,26 @@ pfor 'echo {}' :::: /tmp/pfor-test/input/fruits.txt
 
 **Usability signals to watch:**
 - Does the Noob confuse `:::` and `::::` ?
-- Does the Noob try `cat file | pfor ...` instead? (That's valid too — note it)
+- Does the Noob try `cat file | rfor ...` instead? (That's valid too — note it)
 - What error does the Noob get if they use the wrong one?
 
 ---
 
-### Scenario 5: Stdin Pipe — "Pipe data into pfor"
+### Scenario 5: Stdin Pipe — "Pipe data into rfor"
 
 **Goal:** Use stdin as the argument source.  
 **Motivation:** Unix philosophy — piping is second nature.
 
 **Task for Noob:**
-> List the .txt files in `/tmp/pfor-test/input/` and pipe them to pfor to count lines in each file with `wc -l`.
+> List the .txt files in `/tmp/rfor-test/input/` and pipe them to rfor to count lines in each file with `wc -l`.
 
 **Expected command:**
 ```bash
-ls /tmp/pfor-test/input/*.txt | pfor 'wc -l {}'
+ls /tmp/rfor-test/input/*.txt | rfor 'wc -l {}'
 ```
 
 **Success criteria:**
-- [ ] The Noob successfully pipes input to pfor
+- [ ] The Noob successfully pipes input to rfor
 - [ ] Output shows line counts for each file
 
 **Usability signals to watch:**
@@ -173,7 +173,7 @@ ls /tmp/pfor-test/input/*.txt | pfor 'wc -l {}'
 
 **Expected command:**
 ```bash
-pfor -j 5 'sleep 1 && echo {}' ::: 1 2 3 4 5
+rfor -j 5 'sleep 1 && echo {}' ::: 1 2 3 4 5
 ```
 (or `-j 0` for all CPUs)
 
@@ -192,14 +192,14 @@ pfor -j 5 'sleep 1 && echo {}' ::: 1 2 3 4 5
 ### Scenario 7: Progress Bar — "I want to see progress"
 
 **Goal:** Observe the progress bar during a longer-running task.  
-**Motivation:** The signature feature of pfor.
+**Motivation:** The signature feature of rfor.
 
 **Task for Noob:**
 > Run a slow command (`sleep 2 && echo done: {}`) for items a through e, sequentially (default). Watch for a progress bar at the bottom of the terminal.
 
 **Expected command:**
 ```bash
-pfor 'sleep 2 && echo done: {}' ::: a b c d e
+rfor 'sleep 2 && echo done: {}' ::: a b c d e
 ```
 
 **Success criteria:**
@@ -221,29 +221,29 @@ pfor 'sleep 2 && echo done: {}' ::: a b c d e
 **Motivation:** Real commands fail. Users need predictable behavior.
 
 **Task for Noob (Part A — default continue):**
-> Run `ls {}` for these paths: `/tmp`, `/nonexistent`, `/home`. What happens? Does pfor stop or continue? What exit code do you get?
+> Run `ls {}` for these paths: `/tmp`, `/nonexistent`, `/home`. What happens? Does rfor stop or continue? What exit code do you get?
 
 **Expected command:**
 ```bash
-pfor 'ls {}' ::: /tmp /nonexistent /home
+rfor 'ls {}' ::: /tmp /nonexistent /home
 echo $?
 ```
 
-**Expected behavior:** pfor continues past the failing `ls /nonexistent`, runs all 3 jobs, exits with code 1 (1 failure, capped at 125).
+**Expected behavior:** rfor continues past the failing `ls /nonexistent`, runs all 3 jobs, exits with code 1 (1 failure, capped at 125).
 
 **Task for Noob (Part B — halt-on-fail):**
 > Now run the same command but add `--halt-on-fail`. Does it stop after the failure?
 
 **Expected command:**
 ```bash
-pfor --halt-on-fail 'ls {}' ::: /tmp /nonexistent /home
+rfor --halt-on-fail 'ls {}' ::: /tmp /nonexistent /home
 ```
 
 **Success criteria:**
-- [ ] Part A: Noob observes that pfor continues past failure by default
+- [ ] Part A: Noob observes that rfor continues past failure by default
 - [ ] Part A: Noob checks and reports the exit code
 - [ ] Part B: Noob successfully uses `--halt-on-fail`
-- [ ] Part B: Noob observes that pfor stops after the first failure
+- [ ] Part B: Noob observes that rfor stops after the first failure
 
 **Usability signals to watch:**
 - Is "halt-on-fail" discoverable? Does the Noob try `--stop-on-error` or similar?
@@ -258,13 +258,13 @@ pfor --halt-on-fail 'ls {}' ::: /tmp /nonexistent /home
 **Motivation:** The payoff scenario — does everything come together?
 
 **Task for Noob:**
-> You have 5 text files in `/tmp/pfor-test/input/` (file1.txt through file5.txt). Using pfor, gzip each one in parallel using 3 workers. Show progress.
+> You have 5 text files in `/tmp/rfor-test/input/` (file1.txt through file5.txt). Using rfor, gzip each one in parallel using 3 workers. Show progress.
 
 **Expected command:**
 ```bash
-pfor -j 3 'gzip {}' ::: /tmp/pfor-test/input/file*.txt
+rfor -j 3 'gzip {}' ::: /tmp/rfor-test/input/file*.txt
 ```
-(or `ls /tmp/pfor-test/input/file*.txt | pfor -j 3 'gzip {}'`)
+(or `ls /tmp/rfor-test/input/file*.txt | rfor -j 3 'gzip {}'`)
 
 **Success criteria:**
 - [ ] All 5 files get compressed
@@ -286,13 +286,13 @@ pfor -j 3 'gzip {}' ::: /tmp/pfor-test/input/file*.txt
 
 **Task for Noob:**
 > Try the following and note what happens:
-> 1. Run pfor with no arguments at all
+> 1. Run rfor with no arguments at all
 > 2. Try to use `{.}` (filename without extension) as a token
 > 3. Try to use `--dry-run` to preview commands
 > 4. Try to combine `:::` and `::::` in one command
 
 **Success criteria:**
-- [ ] `pfor` with no args shows help or a clear error
+- [ ] `rfor` with no args shows help or a clear error
 - [ ] `{.}` is not expanded (passed literally) — docs should mention this is not yet supported
 - [ ] `--dry-run` is rejected with a clear error, not silently ignored
 - [ ] Combined `:::` + `::::` either works sensibly or fails with a clear message

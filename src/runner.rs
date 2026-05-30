@@ -209,7 +209,7 @@ fn worker_loop(rx: Receiver<Job>, ctx: &WorkerCtx) {
                     ctx.printer.println(
                         Stream::Stderr,
                         &format!(
-                            "pfor: retrying job {index} (attempt {attempt}/{max_attempts})...",
+                            "rfor: retrying job {index} (attempt {attempt}/{max_attempts})...",
                             index = job.index,
                         ),
                     );
@@ -344,7 +344,7 @@ fn spawn_and_collect(rendered: &str) -> CollectedOutput {
             return CollectedOutput {
                 success: false,
                 stdout_lines: Vec::new(),
-                stderr_lines: vec![format!("pfor: failed to spawn `sh -c`: {}", e)],
+                stderr_lines: vec![format!("rfor: failed to spawn `sh -c`: {}", e)],
             };
         }
     };
@@ -394,7 +394,7 @@ fn spawn_and_stream(rendered: &str, printer: &Arc<Printer>) -> bool {
         Err(e) => {
             printer.println(
                 Stream::Stderr,
-                &format!("pfor: failed to spawn `sh -c`: {}", e),
+                &format!("rfor: failed to spawn `sh -c`: {}", e),
             );
             return false;
         }

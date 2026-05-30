@@ -1,4 +1,4 @@
-//! Template substitution for pfor command strings.
+//! Template substitution for rfor command strings.
 //!
 //! Recognized tokens:
 //! - `{}`       -> current item (shell-quoted)
@@ -202,13 +202,13 @@ pub fn render(template: &str, item: &str, index: usize, var_name: Option<&str>) 
     out
 }
 
-/// GNU parallel tokens that pfor does not yet support.
+/// GNU parallel tokens that rfor does not yet support.
 /// Each entry is (token, description).
 const UNSUPPORTED_TOKENS: &[(&str, &str)] = &[
     ("{%}", "job slot number"),
 ];
 
-/// Check a template for GNU parallel tokens that pfor doesn't support.
+/// Check a template for GNU parallel tokens that rfor doesn't support.
 /// Emits one warning per unsupported token found (to stderr, once per run).
 ///
 /// When `var_name` is set, tokens that happen to match the named variable
@@ -221,7 +221,7 @@ pub fn warn_unsupported_tokens(template: &str, var_name: Option<&str>) {
             // so we always warn.
             let _ = var_name; // var_name doesn't suppress these warnings
             eprintln!(
-                "pfor: warning: `{}` ({}) is not supported in pfor v1 \
+                "rfor: warning: `{}` ({}) is not supported in rfor v1 \
                  and will be passed through literally",
                 token, desc
             );

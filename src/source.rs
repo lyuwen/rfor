@@ -37,7 +37,7 @@ pub fn resolve(
             // stdin — if it's a terminal the user probably forgot ::: or ::::
             if io::stdin().is_terminal() {
                 eprintln!(
-                    "pfor: reading items from stdin (one per line). \
+                    "rfor: reading items from stdin (one per line). \
                      Press Ctrl-D when done, or use ::: / :::: to pass items."
                 );
             }
