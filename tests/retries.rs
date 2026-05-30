@@ -3,7 +3,7 @@
 //! Sprint 2 feature. Tests will fail until implementation lands.
 
 mod common;
-use common::pfor;
+use common::rfor;
 use tempfile::TempDir;
 
 // ─── 1. Retry succeeds on second attempt ──────────────────────────────
@@ -24,7 +24,7 @@ fn retries_passes_on_retry() {
         sentinel_str, sentinel_str
     );
 
-    let out = pfor()
+    let out = rfor()
         .args(["--retries", "2", &template, ":::", "x"])
         .assert()
         .success(); // Should succeed because retry #1 passes.
@@ -38,7 +38,7 @@ fn retries_passes_on_retry() {
 fn retries_exhausted_still_fails() {
     // `false` always fails. With --retries 2, it runs 3 times total
     // (1 original + 2 retries), then counts as 1 failure.
-    pfor()
+    rfor()
         .args(["--retries", "2", "false", ":::", "a"])
         .assert()
         .code(1); // 1 job failed.
@@ -50,7 +50,7 @@ fn retries_exhausted_still_fails() {
 fn retries_zero_is_default_no_retry() {
     // --retries 0 is the same as not specifying --retries.
     // `false` fails once, exit code = 1.
-    pfor()
+    rfor()
         .args(["--retries", "0", "false", ":::", "a"])
         .assert()
         .code(1);
@@ -70,7 +70,7 @@ fn retries_with_halt_on_fail_waits_for_exhaustion() {
         dir_str
     );
 
-    pfor()
+    rfor()
         .args(["--retries", "1", "--halt-on-fail", &template, ":::", "a", "b", "c"])
         .assert()
         .failure();
@@ -107,7 +107,7 @@ fn retries_exit_code_reflects_final_success() {
         sentinel_str, sentinel_str
     );
 
-    pfor()
+    rfor()
         .args(["--retries", "2", &template, ":::", "a", "b", "c"])
         .assert()
         .success(); // All eventually succeed.
@@ -119,7 +119,7 @@ fn retries_exit_code_reflects_final_success() {
 fn retries_stderr_shows_retry_info() {
     // When a job is retried, stderr should contain some indication
     // (e.g. "retrying", "retry", "attempt").
-    let out = pfor()
+    let out = rfor()
         .args(["--retries", "1", "false", ":::", "x"])
         .assert()
         .failure();
@@ -145,7 +145,7 @@ fn retries_work_with_parallel() {
         dir_str
     );
 
-    let out = pfor()
+    let out = rfor()
         .args([
             "--retries", "2", "-j", "2",
             &template, ":::", "a", "b", "c", "d",
@@ -178,7 +178,7 @@ fn retries_with_group_shows_only_final_output() {
         sentinel_str, sentinel_str
     );
 
-    let out = pfor()
+    let out = rfor()
         .args(["--retries", "2", "--group", &template, ":::", "x"])
         .assert()
         .success();

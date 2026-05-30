@@ -3,7 +3,7 @@
 //! Sprint 3 feature. Tests will fail until implementation lands.
 
 mod common;
-use common::pfor;
+use common::rfor;
 use std::fs;
 use tempfile::TempDir;
 
@@ -14,7 +14,7 @@ fn results_creates_output_files() {
     let dir = TempDir::new().unwrap();
     let dir_str = dir.path().to_str().unwrap();
 
-    pfor()
+    rfor()
         .args(["--results", dir_str, "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -38,7 +38,7 @@ fn results_files_contain_correct_content() {
     let dir = TempDir::new().unwrap();
     let dir_str = dir.path().to_str().unwrap();
 
-    pfor()
+    rfor()
         .args(["--results", dir_str, "echo hello-{}", ":::", "world"])
         .assert()
         .success();
@@ -63,7 +63,7 @@ fn results_creates_directory_if_missing() {
     let nested = dir.path().join("sub").join("dir");
     let nested_str = nested.to_str().unwrap();
 
-    pfor()
+    rfor()
         .args(["--results", nested_str, "echo {}", ":::", "x"])
         .assert()
         .success();
@@ -83,7 +83,7 @@ fn results_works_with_group() {
     let dir = TempDir::new().unwrap();
     let dir_str = dir.path().to_str().unwrap();
 
-    pfor()
+    rfor()
         .args([
             "--results", dir_str, "--group", "-j", "2",
             "echo {}", ":::", "a", "b",
@@ -119,7 +119,7 @@ fn results_with_retries_saves_final_attempt() {
     let results_dir = TempDir::new().unwrap();
     let results_str = results_dir.path().to_str().unwrap();
 
-    pfor()
+    rfor()
         .args(["--results", results_str, "--retries", "2", &template, ":::", "x"])
         .assert()
         .success();
@@ -146,7 +146,7 @@ fn results_works_with_parallel() {
     let dir = TempDir::new().unwrap();
     let dir_str = dir.path().to_str().unwrap();
 
-    pfor()
+    rfor()
         .args([
             "--results", dir_str, "-j", "2",
             "echo {}", ":::", "p", "q", "r", "s",
@@ -172,7 +172,7 @@ fn results_still_streams_to_terminal() {
     let dir_str = dir.path().to_str().unwrap();
 
     // --results saves to files AND output should still appear on stdout.
-    let out = pfor()
+    let out = rfor()
         .args(["--results", dir_str, "echo {}", ":::", "visible"])
         .assert()
         .success();
@@ -192,7 +192,7 @@ fn results_sanitizes_filenames() {
     let dir_str = dir.path().to_str().unwrap();
 
     // Items with slashes and special chars should be sanitized in filenames.
-    pfor()
+    rfor()
         .args([
             "--results", dir_str,
             "echo {}", ":::", "/path/to/file", "hello world", "a&b",

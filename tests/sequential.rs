@@ -2,13 +2,13 @@
 //! one-at-a-time behavior.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 #[test]
 fn sequential_output_is_in_order() {
     // With -j 1 (default), jobs must run in the order items are given,
     // so output lines match input order.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "first", "second", "third"])
         .assert()
         .success();
@@ -20,7 +20,7 @@ fn sequential_output_is_in_order() {
 #[test]
 fn sequential_default_is_j1() {
     // Omitting -j should behave identically to -j 1 (ordered).
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "a", "b", "c", "d"])
         .assert()
         .success();
@@ -31,7 +31,7 @@ fn sequential_default_is_j1() {
 
 #[test]
 fn sequential_explicit_j1_same_as_default() {
-    let out = pfor()
+    let out = rfor()
         .args(["-j", "1", "echo {}", ":::", "x", "y", "z"])
         .assert()
         .success();
@@ -43,7 +43,7 @@ fn sequential_explicit_j1_same_as_default() {
 #[test]
 fn sequential_preserves_index_order() {
     // {#} indices must be strictly sequential 1,2,3,… with -j 1.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {#}", ":::", "a", "b", "c", "d", "e"])
         .assert()
         .success();
@@ -57,7 +57,7 @@ fn sequential_is_truly_serial() {
     // Run 4 jobs that each sleep 0.2s. With -j 1, wall time ≥ 0.8s.
     // With parallel, it would be ~0.2s. We check ≥ 0.6s to give margin.
     let start = std::time::Instant::now();
-    pfor()
+    rfor()
         .args(["-j", "1", "sleep 0.2", ":::", "1", "2", "3", "4"])
         .assert()
         .success();

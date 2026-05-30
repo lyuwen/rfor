@@ -1,11 +1,11 @@
 ---
-name: dev-pfor-roadmap
-description: Prioritized feature roadmap for pfor — 9 features across 4 sprints (user-approved 2026-05-29)
+name: dev-rfor-roadmap
+description: Prioritized feature roadmap for rfor — 9 features across 4 sprints (user-approved 2026-05-29)
 metadata:
   type: project
 ---
 
-# pfor Feature Roadmap (2026-05-29)
+# rfor Feature Roadmap (2026-05-29)
 
 All features below are deferred from v1 and bash-syntax. Ranked by user value.
 
@@ -21,7 +21,7 @@ Print rendered commands without executing. P1 usability finding.
 `{.}` (strip extension), `{/}` (basename), `{//}` (dirname), `{/.}` (basename without extension).
 - All four are string manipulation in template.rs
 - Ship as one unit — they're always used together
-- Example: `pfor f in *.png -- convert {f} {.}.jpg`
+- Example: `rfor f in *.png -- convert {f} {.}.jpg`
 
 ## Sprint 2 — Daily Driver (High Impact, Medium Effort)
 
@@ -46,18 +46,18 @@ Save each job's stdout/stderr to files in DIR.
 ## Sprint 4 — Polish (Lower Impact, Higher Effort)
 
 ### 7. `do`/`done` Keywords (Experimental) ⭐⭐⭐
-True bash-like syntax: `pfor i in a b c do echo {i} done`
-- NOT blocked by shell parsing — `do`/`done` are regular strings as args to pfor
+True bash-like syntax: `rfor i in a b c do echo {i} done`
+- NOT blocked by shell parsing — `do`/`done` are regular strings as args to rfor
 - Implementation: accept `do` as alias for `--`, strip trailing `done`
 
 ### 8. Multi-bar Per-Job Display ⭐⭐
 Individual progress bars per running job.
 
 ### 9. Multiple Named Variables ⭐⭐
-`pfor i j in (a,1) (b,2) -- echo {i} {j}`
+`rfor i j in (a,1) (b,2) -- echo {i} {j}`
 
 ## Dependencies
 - `--results DIR` (#5) benefits from filename tokens (#2)
 - All other features are independent
 
-**Related:** [[dev-pfor-scope]] [[dev-pfor-bash-syntax-scope]] [[dev-language-stack]]
+**Related:** [[dev-rfor-scope]] [[dev-rfor-bash-syntax-scope]] [[dev-language-stack]]

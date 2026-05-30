@@ -1,12 +1,12 @@
-//! Tests for bash for-loop style syntax: `pfor VAR in ITEMS -- COMMAND`.
+//! Tests for bash for-loop style syntax: `rfor VAR in ITEMS -- COMMAND`.
 //!
-//! Spec: `.claude/team-memory/dev-pfor-bash-syntax-scope.md`
+//! Spec: `.claude/team-memory/dev-rfor-bash-syntax-scope.md`
 //! 12 scenarios covering basic usage, named variable resolution, backward
 //! compatibility tokens, stdin/argfile modes, flag positioning, error cases,
 //! and coexistence with GNU-parallel syntax.
 
 mod common;
-use common::pfor;
+use common::rfor;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -20,8 +20,8 @@ fn sorted_lines(s: &str) -> Vec<String> {
 
 #[test]
 fn bash_style_basic_inline_items() {
-    // `pfor i in a b c -- echo {i}` → prints a, b, c
-    let out = pfor()
+    // `rfor i in a b c -- echo {i}` → prints a, b, c
+    let out = rfor()
         .args(["i", "in", "a", "b", "c", "--", "echo", "{i}"])
         .assert()
         .success();
@@ -34,7 +34,7 @@ fn bash_style_basic_inline_items() {
 #[test]
 fn bash_style_named_var_substitutes_correctly() {
     // `{myvar}` resolves when the declared variable is `myvar`.
-    let out = pfor()
+    let out = rfor()
         .args(["myvar", "in", "hello", "world", "--", "echo", "{myvar}"])
         .assert()
         .success();
@@ -47,7 +47,7 @@ fn bash_style_named_var_substitutes_correctly() {
 #[test]
 fn bash_style_wrong_var_name_passes_through() {
     // Declared var is `i`, but template uses `{other}` → literal `{other}`.
-    let out = pfor()
+    let out = rfor()
         .args(["i", "in", "x", "--", "echo", "{other}"])
         .assert()
         .success();
@@ -60,7 +60,7 @@ fn bash_style_wrong_var_name_passes_through() {
 #[test]
 fn bash_style_unnamed_placeholder_still_works() {
     // `{}` always substitutes the current item, even in bash-style.
-    let out = pfor()
+    let out = rfor()
         .args(["i", "in", "alpha", "beta", "--", "echo", "{}"])
         .assert()
         .success();
@@ -73,7 +73,7 @@ fn bash_style_unnamed_placeholder_still_works() {
 #[test]
 fn bash_style_job_index_placeholder_still_works() {
     // `{#}` gives 1-based job index, even in bash-style mode.
-    let out = pfor()
+    let out = rfor()
         .args(["i", "in", "a", "b", "c", "--", "echo", "{#}"])
         .assert()
         .success();
@@ -87,8 +87,8 @@ fn bash_style_job_index_placeholder_still_works() {
 
 #[test]
 fn bash_style_stdin_items() {
-    // `cat items | pfor i -- echo {i}` — no `in`, items from stdin.
-    let out = pfor()
+    // `cat items | rfor i -- echo {i}` — no `in`, items from stdin.
+    let out = rfor()
         .args(["i", "--", "echo", "{i}"])
         .write_stdin("foo\nbar\nbaz\n")
         .assert()
@@ -101,14 +101,14 @@ fn bash_style_stdin_items() {
 
 #[test]
 fn bash_style_argfile_with_quadruple_colon() {
-    // `pfor i in :::: file.txt -- echo {i}`
+    // `rfor i in :::: file.txt -- echo {i}`
     let mut f = NamedTempFile::new().unwrap();
     writeln!(f, "line1").unwrap();
     writeln!(f, "line2").unwrap();
     writeln!(f, "line3").unwrap();
     f.flush().unwrap();
 
-    let out = pfor()
+    let out = rfor()
         .args(["i", "in", "::::"])
         .arg(f.path())
         .args(["--", "echo", "{i}"])
@@ -122,8 +122,8 @@ fn bash_style_argfile_with_quadruple_colon() {
 
 #[test]
 fn bash_style_flags_before_variable() {
-    // `pfor -j 2 i in a b c d -- echo {i}` — flags come first.
-    let out = pfor()
+    // `rfor -j 2 i in a b c d -- echo {i}` — flags come first.
+    let out = rfor()
         .args(["-j", "2", "i", "in", "a", "b", "c", "d", "--", "echo", "{i}"])
         .assert()
         .success();
@@ -137,8 +137,8 @@ fn bash_style_flags_before_variable() {
 fn bash_style_halt_on_fail() {
     // Sequential default: "ok" runs, "fail" exits 1 → halt, "after" should NOT run.
     // Template words are joined into: `if [ {i} = fail ]; then exit 1; fi; echo {i}`
-    // pfor wraps in `sh -c`, so no need for an explicit `sh -c` in the template.
-    let out = pfor()
+    // rfor wraps in `sh -c`, so no need for an explicit `sh -c` in the template.
+    let out = rfor()
         .args([
             "--halt-on-fail",
             "i", "in", "ok", "fail", "after",
@@ -161,10 +161,10 @@ fn bash_style_halt_on_fail() {
 
 #[test]
 fn bash_style_missing_separator_is_error() {
-    // `pfor i in a b c echo {i}` — no `--` to delimit the command.
+    // `rfor i in a b c echo {i}` — no `--` to delimit the command.
     // This should either error or fall through to GNU-parallel mode (which
     // would also error since "i" isn't a valid template). Either way: failure.
-    pfor()
+    rfor()
         .args(["i", "in", "a", "b", "c", "echo", "{i}"])
         .assert()
         .failure();
@@ -174,8 +174,8 @@ fn bash_style_missing_separator_is_error() {
 
 #[test]
 fn bash_style_no_command_after_separator_is_error() {
-    // `pfor i in a b c --` — nothing after the separator.
-    pfor()
+    // `rfor i in a b c --` — nothing after the separator.
+    rfor()
         .args(["i", "in", "a", "b", "c", "--"])
         .assert()
         .failure();
@@ -185,8 +185,8 @@ fn bash_style_no_command_after_separator_is_error() {
 
 #[test]
 fn gnu_parallel_syntax_still_works() {
-    // The existing `pfor 'echo {}' ::: a b c` must continue to work.
-    let out = pfor()
+    // The existing `rfor 'echo {}' ::: a b c` must continue to work.
+    let out = rfor()
         .args(["echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();

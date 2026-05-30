@@ -1,31 +1,31 @@
 ---
-name: dev-pfor-bash-syntax-scope
-description: pfor bash for-loop syntax feature — scope, syntax, parsing, named variables (user-approved 2026-05-29)
+name: dev-rfor-bash-syntax-scope
+description: rfor bash for-loop syntax feature — scope, syntax, parsing, named variables (user-approved 2026-05-29)
 metadata:
   type: project
 ---
 
-# pfor bash for-loop syntax (user-approved 2026-05-29)
+# rfor bash for-loop syntax (user-approved 2026-05-29)
 
-**Feature:** Add bash-style `pfor VAR in ITEMS -- COMMAND` syntax with real named variables, coexisting with GNU parallel syntax.
+**Feature:** Add bash-style `rfor VAR in ITEMS -- COMMAND` syntax with real named variables, coexisting with GNU parallel syntax.
 
 **Syntax:**
 ```bash
 # Bash-style with inline items
-pfor i in a b c -- echo {i}
+rfor i in a b c -- echo {i}
 
 # Bash-style with file
-pfor i in :::: urls.txt -- curl -sO {i}
+rfor i in :::: urls.txt -- curl -sO {i}
 
 # Bash-style with stdin
-cat items.txt | pfor i -- echo {i}
+cat items.txt | rfor i -- echo {i}
 
 # With flags
-pfor -j 4 i in a b c -- echo {i}
-pfor --halt-on-fail i in a b c -- echo {i}
+rfor -j 4 i in a b c -- echo {i}
+rfor --halt-on-fail i in a b c -- echo {i}
 
 # GNU parallel style (unchanged, still works)
-pfor 'echo {}' ::: a b c
+rfor 'echo {}' ::: a b c
 ```
 
 **Named variables (real, not cosmetic):**
@@ -59,9 +59,9 @@ pfor 'echo {}' ::: a b c
 **New tests:** `tests/bash_style.rs` — 12 scenarios covering basic usage, named var matching, wrong name passthrough, `{}` and `{#}` compat, stdin, argfile, flags, error cases.
 
 **Branching:**
-- `dev/pfor-bash-syntax` from main
-- `feat/pfor-bash-syntax` for implementer
-- `test/pfor-bash-syntax` for tester
+- `dev/rfor-bash-syntax` from main
+- `feat/rfor-bash-syntax` for implementer
+- `test/rfor-bash-syntax` for tester
 
 **Out of scope:**
 - Multiple named variables
@@ -69,4 +69,4 @@ pfor 'echo {}' ::: a b c
 - `do`/`done` keywords
 - Implicit append in bash-style (must use `{varname}` or `{}`)
 
-**Related:** [[dev-pfor-scope]] [[dev-language-stack]]
+**Related:** [[dev-rfor-scope]] [[dev-language-stack]]

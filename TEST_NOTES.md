@@ -1,4 +1,4 @@
-# pfor test suite — notes for architect, reviewer, and implementer
+# rfor test suite — notes for architect, reviewer, and implementer
 
 ## What this branch contains
 All files under `tests/`, plus a `Cargo.toml` containing **only** a `[package]`
@@ -8,12 +8,12 @@ predictable merge conflict in `Cargo.toml` at merge time — the resolution is
 the UNION of the two files.**
 
 ## Black-box test strategy
-Tests invoke the `pfor` binary via `assert_cmd::Command::cargo_bin("pfor")`.
+Tests invoke the `rfor` binary via `assert_cmd::Command::cargo_bin("rfor")`.
 No test imports anything from the production crate. This was a deliberate
 constraint set by the architect.
 
-## Assumptions about pfor's runtime
-The spec doesn't pin how `pfor` invokes the command template (e.g. `sh -c
+## Assumptions about rfor's runtime
+The spec doesn't pin how `rfor` invokes the command template (e.g. `sh -c
 <template>` vs internal argv splitting). The tests assume **`sh -c`-style**
 execution because:
 1. It matches GNU parallel's conventional behavior, which the spec invokes
@@ -63,7 +63,7 @@ tests will fail and the architect should mediate.
 - **Interactive TTY rendering of the indicatif sticky progress bar.** Requires
   a real PTY; not worth a `portable-pty` dependency for v1. Manual verification
   needed:
-  - Run `pfor -j 4 'sleep 1; echo {}' ::: a b c d e f g h` from a real
+  - Run `rfor -j 4 'sleep 1; echo {}' ::: a b c d e f g h` from a real
     terminal. Observe: a bar pinned at the bottom showing `N/8` and ETA, with
     job output streaming above it; on completion the bar clears or finalises
     cleanly.

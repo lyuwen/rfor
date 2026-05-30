@@ -2,11 +2,11 @@
 //! no placeholders.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 #[test]
 fn empty_placeholder_substitutes_the_item() {
-    let out = pfor()
+    let out = rfor()
         .arg("echo {}")
         .args(["", ":::", "alpha", "beta", "gamma"])
         // ^ first arg is the template; `:::` introduces literal args.
@@ -18,7 +18,7 @@ fn empty_placeholder_substitutes_the_item() {
 
 #[test]
 fn item_placeholder_basic() {
-    let out = pfor()
+    let out = rfor()
         .args(["echo {}", ":::", "alpha", "beta", "gamma"])
         .assert()
         .success();
@@ -31,7 +31,7 @@ fn item_placeholder_basic() {
 #[test]
 fn job_index_placeholder_is_one_based() {
     // {#} = 1-based index per spec.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {#}", ":::", "x", "y", "z"])
         .assert()
         .success();
@@ -43,7 +43,7 @@ fn job_index_placeholder_is_one_based() {
 
 #[test]
 fn item_and_index_in_same_template() {
-    let out = pfor()
+    let out = rfor()
         .args(["echo {#}={}", ":::", "a", "b"])
         .assert()
         .success();
@@ -56,7 +56,7 @@ fn item_and_index_in_same_template() {
 #[test]
 fn double_braces_escape_to_literal_braces() {
     // `{{` -> `{`, `}}` -> `}`. `{}` should still substitute.
-    let out = pfor()
+    let out = rfor()
         .args(["echo {{}} {}", ":::", "value"])
         .assert()
         .success();
@@ -66,8 +66,8 @@ fn double_braces_escape_to_literal_braces() {
 
 #[test]
 fn template_without_placeholder_runs_per_item() {
-    // From the task: `pfor 'echo hi' ::: 1 2 3` prints `hi` three times.
-    let out = pfor()
+    // From the task: `rfor 'echo hi' ::: 1 2 3` prints `hi` three times.
+    let out = rfor()
         .args(["echo hi", ":::", "1", "2", "3"])
         .assert()
         .success();
@@ -83,7 +83,7 @@ fn template_without_placeholder_runs_per_item() {
 fn placeholder_with_special_characters_in_item() {
     // Items containing spaces must be substituted as a single argument when
     // executed via the shell (the template controls quoting).
-    let out = pfor()
+    let out = rfor()
         .args(["echo [{}]", ":::", "hello world"])
         .assert()
         .success();

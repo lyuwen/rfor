@@ -4,7 +4,7 @@
 //! Sprint 2 feature. Tests will fail until implementation lands.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 fn sorted_lines(s: &str) -> Vec<String> {
     let mut v: Vec<String> = s.lines().map(|l| l.to_string()).collect();
@@ -19,7 +19,7 @@ fn group_parallel_output_is_contiguous_per_job() {
     // Each job prints 3 lines. With --group, all 3 lines from one job
     // must appear together (no interleaving from other jobs).
     // Template: print a header, body, footer tagged with the item.
-    let out = pfor()
+    let out = rfor()
         .args([
             "--group", "-j", "2",
             "sh -c 'echo HEAD-{}; sleep 0.05; echo BODY-{}; echo TAIL-{}'",
@@ -63,7 +63,7 @@ fn group_parallel_output_is_contiguous_per_job() {
 fn group_preserves_all_output_content() {
     // Same items, same template — --group should produce the same set of
     // output lines as without --group, just potentially reordered.
-    let out = pfor()
+    let out = rfor()
         .args(["--group", "-j", "2", "echo {}", ":::", "p", "q", "r", "s"])
         .assert()
         .success();
@@ -77,7 +77,7 @@ fn group_preserves_all_output_content() {
 fn group_with_sequential_output_unchanged() {
     // -j 1 + --group: output should be in order (sequential means no interleaving
     // anyway, so --group is effectively a no-op).
-    let out = pfor()
+    let out = rfor()
         .args(["--group", "-j", "1", "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -92,7 +92,7 @@ fn group_with_sequential_output_unchanged() {
 fn group_stderr_is_also_grouped_per_job() {
     // Each job writes to both stdout and stderr. With --group, stderr
     // lines for a job should be contiguous (not mixed with other jobs').
-    let out = pfor()
+    let out = rfor()
         .args([
             "--group", "-j", "2",
             "sh -c 'echo OUT-{}; echo ERR-{} >&2'",
@@ -112,7 +112,7 @@ fn group_stderr_is_also_grouped_per_job() {
 fn group_with_halt_on_fail_shows_completed_jobs() {
     // --group + --halt-on-fail: jobs that completed before halt should
     // still have their grouped output emitted.
-    let out = pfor()
+    let out = rfor()
         .args([
             "--group", "--halt-on-fail",
             "sh -c 'if [ {} = fail ]; then exit 1; fi; echo ok-{}'",
@@ -143,7 +143,7 @@ fn group_stress_many_parallel_jobs() {
     ];
     args.extend(items.iter());
 
-    let out = pfor().args(args).assert().success();
+    let out = rfor().args(args).assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let lines: Vec<&str> = stdout.lines().collect();
 
@@ -174,7 +174,7 @@ fn group_with_dry_run() {
     // --group + --dry-run: rendered commands should still be printed, grouped.
     // With dry-run each job is just one line, so grouping doesn't change much,
     // but the flags shouldn't conflict.
-    let out = pfor()
+    let out = rfor()
         .args(["--group", "--dry-run", "-j", "2", "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -189,7 +189,7 @@ fn without_group_parallel_may_interleave() {
     // Without --group, parallel output CAN interleave. We don't require
     // it to interleave (it might not on fast jobs), but we verify the
     // default behavior produces all output without error.
-    let out = pfor()
+    let out = rfor()
         .args([
             "-j", "4",
             "sh -c 'echo LINE1-{}; echo LINE2-{}'",

@@ -4,10 +4,10 @@
 //! separator in bash-style syntax. `done` is optional and ignored if present
 //! (stripped from the command words).
 //!
-//! Syntax: `pfor VAR in ITEMS do COMMAND [done]`
+//! Syntax: `rfor VAR in ITEMS do COMMAND [done]`
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 fn sorted_lines(s: &str) -> Vec<String> {
     let mut v: Vec<String> = s.lines().map(|l| l.to_string()).collect();
@@ -19,8 +19,8 @@ fn sorted_lines(s: &str) -> Vec<String> {
 
 #[test]
 fn do_done_basic() {
-    // `pfor i in a b c do echo {i} done` → outputs a, b, c
-    let out = pfor()
+    // `rfor i in a b c do echo {i} done` → outputs a, b, c
+    let out = rfor()
         .args(["i", "in", "a", "b", "c", "do", "echo", "{i}", "done"])
         .assert()
         .success();
@@ -32,8 +32,8 @@ fn do_done_basic() {
 
 #[test]
 fn do_without_trailing_done() {
-    // `pfor i in a b c do echo {i}` → same result (done is optional)
-    let out = pfor()
+    // `rfor i in a b c do echo {i}` → same result (done is optional)
+    let out = rfor()
         .args(["i", "in", "a", "b", "c", "do", "echo", "{i}"])
         .assert()
         .success();
@@ -45,8 +45,8 @@ fn do_without_trailing_done() {
 
 #[test]
 fn do_done_with_parallel_flag() {
-    // `pfor -j 2 i in a b c d do echo {i} done`
-    let out = pfor()
+    // `rfor -j 2 i in a b c d do echo {i} done`
+    let out = rfor()
         .args(["-j", "2", "i", "in", "a", "b", "c", "d", "do", "echo", "{i}", "done"])
         .assert()
         .success();
@@ -58,8 +58,8 @@ fn do_done_with_parallel_flag() {
 
 #[test]
 fn double_dash_still_works() {
-    // `pfor i in a b c -- echo {i}` → unchanged behavior
-    let out = pfor()
+    // `rfor i in a b c -- echo {i}` → unchanged behavior
+    let out = rfor()
         .args(["i", "in", "a", "b", "c", "--", "echo", "{i}"])
         .assert()
         .success();
@@ -71,8 +71,8 @@ fn double_dash_still_works() {
 
 #[test]
 fn do_done_stdin_mode() {
-    // `echo items | pfor i do echo {i} done`
-    let out = pfor()
+    // `echo items | rfor i do echo {i} done`
+    let out = rfor()
         .args(["i", "do", "echo", "{i}", "done"])
         .write_stdin("foo\nbar\n")
         .assert()
@@ -85,8 +85,8 @@ fn do_done_stdin_mode() {
 
 #[test]
 fn do_done_named_var() {
-    // `pfor file in a.txt b.txt do echo {file} done`
-    let out = pfor()
+    // `rfor file in a.txt b.txt do echo {file} done`
+    let out = rfor()
         .args(["file", "in", "a.txt", "b.txt", "do", "echo", "{file}", "done"])
         .assert()
         .success();
@@ -98,8 +98,8 @@ fn do_done_named_var() {
 
 #[test]
 fn do_done_job_index() {
-    // `pfor i in a b do echo {#} done`
-    let out = pfor()
+    // `rfor i in a b do echo {#} done`
+    let out = rfor()
         .args(["i", "in", "a", "b", "do", "echo", "{#}", "done"])
         .assert()
         .success();
@@ -114,7 +114,7 @@ fn do_done_job_index() {
 #[test]
 fn do_done_with_halt_on_fail() {
     // Halt should work with do/done syntax.
-    let out = pfor()
+    let out = rfor()
         .args([
             "--halt-on-fail",
             "i", "in", "ok", "fail", "after",
@@ -136,8 +136,8 @@ fn do_done_with_halt_on_fail() {
 
 #[test]
 fn do_done_multi_word_command() {
-    // `pfor i in a b do echo start {i} end done`
-    let out = pfor()
+    // `rfor i in a b do echo start {i} end done`
+    let out = rfor()
         .args(["i", "in", "a", "b", "do", "echo", "start", "{i}", "end", "done"])
         .assert()
         .success();
@@ -154,8 +154,8 @@ fn do_done_multi_word_command() {
 
 #[test]
 fn gnu_parallel_unchanged_with_do_done_feature() {
-    // `pfor 'echo {}' ::: a b c` still works — do/done doesn't break it.
-    let out = pfor()
+    // `rfor 'echo {}' ::: a b c` still works — do/done doesn't break it.
+    let out = rfor()
         .args(["echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();

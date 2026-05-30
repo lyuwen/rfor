@@ -2,10 +2,10 @@
 
 use clap::{ArgAction, Parser};
 
-/// pfor: a parallel for-loop replacement with live output and a sticky progress bar.
+/// rfor: a parallel for-loop replacement with live output and a sticky progress bar.
 #[derive(Parser, Debug)]
 #[command(
-    name = "pfor",
+    name = "rfor",
     version,
     about = "Parallel for-loop replacement with live output and a sticky progress bar",
     long_about = None,
@@ -69,62 +69,62 @@ Tokens in the template:
 
 Examples:
   # GNU parallel style — inline args
-  pfor 'echo {}' ::: alpha beta gamma
+  rfor 'echo {}' ::: alpha beta gamma
 
   # GNU parallel style — items from a file
-  pfor -j 4 'curl -sO {}' :::: urls.txt
+  rfor -j 4 'curl -sO {}' :::: urls.txt
 
   # GNU parallel style — items from stdin
-  printf '%s\\n' a b c | pfor 'echo job {#}: {}'
+  printf '%s\\n' a b c | rfor 'echo job {#}: {}'
 
   # Filename tokens
-  pfor 'echo {.}' ::: photo.tar.gz doc.pdf
-  pfor 'echo {/} is in {//}' ::: /path/to/file.txt
+  rfor 'echo {.}' ::: photo.tar.gz doc.pdf
+  rfor 'echo {/} is in {//}' ::: /path/to/file.txt
 
   # Bash for-loop style — inline items
-  pfor i in a b c -- echo {i}
+  rfor i in a b c -- echo {i}
 
   # Bash for-loop style — do/done keywords
-  pfor i in a b c do echo {i} done
+  rfor i in a b c do echo {i} done
 
   # Bash for-loop style — stdin with do/done
-  cat items.txt | pfor i do echo {i} done
+  cat items.txt | rfor i do echo {i} done
 
   # Bash for-loop style — with file
-  pfor i in :::: urls.txt -- curl -sO {i}
+  rfor i in :::: urls.txt -- curl -sO {i}
 
   # Bash for-loop style — stdin
-  cat items.txt | pfor i -- echo {i}
+  cat items.txt | rfor i -- echo {i}
 
   # Bash for-loop style — with flags
-  pfor -j 4 i in a b c -- echo {i}
+  rfor -j 4 i in a b c -- echo {i}
 
   # Dry run — see commands without executing
-  pfor --dry-run 'echo {}' ::: alpha beta gamma
+  rfor --dry-run 'echo {}' ::: alpha beta gamma
 
   # Group output — prevent interleaving with parallel jobs
-  pfor -j 4 --group 'make -C {}' ::: proj1 proj2 proj3
+  rfor -j 4 --group 'make -C {}' ::: proj1 proj2 proj3
 
   # Retry failed jobs up to 3 times
-  pfor --retries 3 'curl -sfO {}' ::: url1 url2 url3
+  rfor --retries 3 'curl -sfO {}' ::: url1 url2 url3
 
   # Save job output to files
-  pfor --results ./out 'echo {}' ::: a b c
+  rfor --results ./out 'echo {}' ::: a b c
 
   # Brace expansion — numeric range
-  pfor 'echo {}' ::: {1..10}
+  rfor 'echo {}' ::: {1..10}
 
   # Brace expansion — zero-padded
-  pfor 'process file{}.dat' ::: {01..20}
+  rfor 'process file{}.dat' ::: {01..20}
 
   # Brace expansion — alphabetic
-  pfor 'echo {}' ::: {a..f}
+  rfor 'echo {}' ::: {a..f}
 
   # Multi-bar — per-worker progress (experimental)
-  pfor -j 4 --multi-bar 'sleep 1 && echo {}' ::: {1..20}
+  rfor -j 4 --multi-bar 'sleep 1 && echo {}' ::: {1..20}
 
   # Stop on first failure
-  pfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
+  rfor --halt-on-fail 'flaky-cmd {}' ::: 1 2 3 4
 ";
 
 /// Parsed result of splitting positional arguments into their components.
@@ -136,7 +136,7 @@ pub struct SplitArgs {
     pub inline_items: Option<Vec<String>>,
     /// Path to an argfile provided after `::::`, if any.
     pub argfile: Option<String>,
-    /// Named variable for bash-style syntax (e.g. `i` in `pfor i in ... -- ...`).
+    /// Named variable for bash-style syntax (e.g. `i` in `rfor i in ... -- ...`).
     /// `None` for GNU-parallel style.
     pub var_name: Option<String>,
 }
@@ -217,14 +217,14 @@ fn parse_bash_with_items(rest: &[String]) -> Result<SplitArgs, String> {
         Some(2) => {
             return Err(format!(
                 "no items between `in` and separator. \
-                 Did you mean `pfor {} -- COMMAND` to read from stdin?",
+                 Did you mean `rfor {} -- COMMAND` to read from stdin?",
                 var_name
             ));
         }
         _ => {
             return Err(format!(
                 "missing `--` or `do` separator. Bash-style syntax: \
-                 pfor {} in ITEMS -- COMMAND  (or: pfor {} in ITEMS do COMMAND done)",
+                 rfor {} in ITEMS -- COMMAND  (or: rfor {} in ITEMS do COMMAND done)",
                 var_name, var_name
             ));
         }
@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn bash_empty_items_err() {
-        // `pfor i in -- echo {i}` — no items between in and --
+        // `rfor i in -- echo {i}` — no items between in and --
         let result = split_rest(vec![
             "i".into(), "in".into(), "--".into(), "echo".into(), "{i}".into(),
         ]);

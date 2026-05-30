@@ -1,12 +1,12 @@
 [package]
-name = "pfor"
+name = "rfor"
 version = "0.1.0"
 edition = "2021"
 description = "A parallel for-loop replacement with live output and a sticky progress bar."
 license = "MIT OR Apache-2.0"
 
 [[bin]]
-name = "pfor"
+name = "rfor"
 path = "src/main.rs"
 
 [dependencies]

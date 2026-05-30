@@ -4,7 +4,7 @@
 //! did NOT run. Sequential mode makes ordering deterministic.
 
 mod common;
-use common::pfor;
+use common::rfor;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -25,7 +25,7 @@ fn halt_on_fail_stops_after_first_failure_sequential() {
         "sh -c 'touch {}/{{}}; if [ {{}} = c ]; then exit 1; fi'",
         dir_path
     );
-    pfor()
+    rfor()
         .args(["--halt-on-fail", &template, ":::", "a", "b", "c", "d", "e"])
         .assert()
         .failure();
@@ -43,7 +43,7 @@ fn halt_on_fail_stops_after_first_failure_sequential() {
 #[test]
 fn halt_on_fail_exit_code_reflects_failure() {
     // When --halt-on-fail triggers, exit code should be non-zero.
-    pfor()
+    rfor()
         .args(["--halt-on-fail", "sh -c 'exit {}'", ":::", "0", "1", "0"])
         .assert()
         .failure();
@@ -52,7 +52,7 @@ fn halt_on_fail_exit_code_reflects_failure() {
 #[test]
 fn halt_on_fail_with_all_passing_exits_zero() {
     // --halt-on-fail with no failures should complete normally.
-    let out = pfor()
+    let out = rfor()
         .args(["--halt-on-fail", "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -70,7 +70,7 @@ fn halt_on_fail_first_job_fails_immediately() {
         "sh -c 'touch {}/{{}}; if [ {{}} = x ]; then exit 1; fi'",
         dir_path
     );
-    pfor()
+    rfor()
         .args(["--halt-on-fail", &template, ":::", "x", "y", "z"])
         .assert()
         .failure();
@@ -92,7 +92,7 @@ fn halt_on_fail_parallel_stops_dispatching() {
         "sh -c 'touch {}/{{}}; if [ {{}} = 1 ]; then exit 1; else sleep 0.1; fi'",
         dir_path
     );
-    pfor()
+    rfor()
         .args(["-j", "2", "--halt-on-fail", &template, ":::", "1", "2", "3", "4", "5", "6"])
         .assert()
         .failure();

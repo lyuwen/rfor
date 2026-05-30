@@ -3,14 +3,14 @@
 //! Sprint 1 feature. Tests will fail until implementation lands.
 
 mod common;
-use common::pfor;
+use common::rfor;
 
 #[test]
 fn dry_run_prints_commands_not_output() {
     // `--dry-run` should print the rendered shell commands, NOT execute them.
-    // `pfor --dry-run 'echo {}' ::: a b c` should output rendered commands
+    // `rfor --dry-run 'echo {}' ::: a b c` should output rendered commands
     // containing "echo" and the item, NOT just "a", "b", "c".
-    let out = pfor()
+    let out = rfor()
         .args(["--dry-run", "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -35,7 +35,7 @@ fn dry_run_prints_commands_not_output() {
 #[test]
 fn dry_run_exit_code_is_always_zero() {
     // Even with commands that would fail, --dry-run never executes, so exit 0.
-    pfor()
+    rfor()
         .args(["--dry-run", "false", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -44,7 +44,7 @@ fn dry_run_exit_code_is_always_zero() {
 #[test]
 fn dry_run_works_with_parallel() {
     // --dry-run + -j 2 should still just print commands (no execution).
-    let out = pfor()
+    let out = rfor()
         .args(["--dry-run", "-j", "2", "echo {}", ":::", "a", "b", "c"])
         .assert()
         .success();
@@ -61,8 +61,8 @@ fn dry_run_works_with_parallel() {
 
 #[test]
 fn dry_run_works_with_bash_style() {
-    // `pfor --dry-run i in a b c -- echo {i}` should print rendered commands.
-    let out = pfor()
+    // `rfor --dry-run i in a b c -- echo {i}` should print rendered commands.
+    let out = rfor()
         .args(["--dry-run", "i", "in", "a", "b", "c", "--", "echo", "{i}"])
         .assert()
         .success();
@@ -81,7 +81,7 @@ fn dry_run_works_with_bash_style() {
 #[test]
 fn dry_run_shows_index_in_rendered_command() {
     // `{#}` should be expanded in the dry-run output.
-    let out = pfor()
+    let out = rfor()
         .args(["--dry-run", "echo {#}: {}", ":::", "x", "y"])
         .assert()
         .success();
@@ -98,7 +98,7 @@ fn dry_run_shows_index_in_rendered_command() {
 fn dry_run_with_halt_on_fail_no_conflict() {
     // --dry-run + --halt-on-fail should not conflict — nothing executes,
     // nothing can fail, so halt-on-fail is a no-op. Exit 0.
-    let out = pfor()
+    let out = rfor()
         .args([
             "--dry-run", "--halt-on-fail",
             "might-fail {}", ":::", "a", "b", "c",
